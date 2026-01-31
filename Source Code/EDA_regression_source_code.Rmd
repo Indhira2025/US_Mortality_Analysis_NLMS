@@ -1,0 +1,665 @@
+---
+title: "Untitled"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-12-05"
+---
+
+## Methods
+
+
+```{r}
+## Loading the libraries
+library(kableExtra)
+library(bench)
+library(dplyr)
+library(knitr)
+library(data.table)
+#install.packages("arrow")
+library(arrow)
+library(tidyr)
+
+```
+
+### Data Importing
+
+To efficiently load and preprocess the NLMS Tobacco-Use dataset (~493,000 observations and 43 variables), we compared the performance of base R’s read.csv() with the optimized fread() function from the data.table package.
+```{r}
+bench_results <- bench::mark(
+  read_csv = as.data.frame(read.csv("tu_new.csv")),
+  fread = as.data.frame(data.table::fread("tu_new.csv")),
+  iterations = 1
+)
+bench_tbl <- bench_results %>%
+  mutate(
+    Method = as.character(expression),
+    Runtime = format(min, digits = 3),
+    Memory = format(mem_alloc, units = "auto"),
+    GC = n_gc
+  ) %>%
+  select(Method, Runtime, Memory, GC)
+bench_tbl %>%
+  kable("html", 
+        caption = "Benchmark Comparison of Data Loading Methods") %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, background = "#f0f0f0") %>%
+  column_spec(1, bold = TRUE)
+```
+Benchmarking demonstrated that fread() provided substantial gains in computational efficiency, completing the data import in 80 milliseconds compared with 3.08 seconds using read.csv(), indicating fread() is ~35× faster than read.csv.That is a massive performance gain, especially useful when repeatedly running EDA or model training. Memory usage was also significantly lower (176 MB vs. 578 MB), and fread() incurred no garbage collection events, whereas read.csv() triggered multiple memory reallocations.These results indicate that fread() is markedly faster and more memory-efficient for large datasets, supporting its use in our big-data workflow.
+
+```{r}
+
+ldata_fread <- fread("tu_new.csv")
+str(ldata_fread)
+
+###We used Apache Arrow and the Parquet format because the NLMS Tobacco Use dataset is large (~493,000 observations with many variables), and base R data handling becomes inefficient and memory-intensive at this scale.
+
+write_parquet(ldata_fread, "tu_new.parquet")
+ds <- open_dataset("tu_new.parquet")
+
+```
+
+
+```{r}
+ds %>%
+  group_by(sex) %>%
+  summarise(mortality_rate = mean(inddea)) %>%
+  collect()
+
+schema(ds)
+```
+
+Arrow processes only required columns
+Arrow scans data in chunks
+Computations push down to C++ backend
+No full dataset in memory
+
+```{r}
+### Descriptive Analysis
+
+
+df <- ds %>%
+  dplyr::select(curruse,race, age, sex,ms,histatus,adjinc,inddea,smokstat,smok100,agesmk,everuse) %>%
+  collect()
+
+
+ds_mod <- df %>%
+  mutate(
+    curruse = as.character(curruse),
+    curruse_recode = case_when(
+      grepl("1", curruse) ~ 1,  # any “1” anywhere → Yes
+      curruse == "22222" ~ 0,   # all “2”s → No
+      TRUE ~ NA_real_           # any “9” or invalid → Missing
+    )
+    )%>%
+    mutate(
+    everuse = as.character(everuse),
+    everuse_recode = case_when(
+      grepl("1", everuse) ~ 1,          # any “1” anywhere → Yes
+      everuse == "22222" ~ 0,           # all “2”s → No
+      TRUE ~ NA_real_                   # any “9” or invalid → Missing
+    )
+    )%>%
+   mutate(
+    ms_recode = case_when(
+      ms == 1 ~ 1,                # Married
+      ms %in% c(2, 3,4,5) ~ 0,     # Widowed, Separated,Divorced, Never married → Not married
+      TRUE ~ NA_real_             # Missing or unknown
+    )
+  )
+
+
+table(
+  ds_mod %>%
+    dplyr::select(curruse_recode) %>%
+    collect() %>%
+    pull(curruse_recode),
+  useNA = "ifany"
+)
+table(
+  ds_mod %>%
+    dplyr::select(everuse_recode) %>%
+    collect() %>%
+    pull(everuse_recode),
+  useNA = "ifany"
+)
+table(
+  ds_mod %>%
+    dplyr::select(smokstat) %>%
+    collect() %>%
+    pull(smokstat),
+  useNA = "ifany"
+)
+
+
+ds_renamed <- ds_mod %>%
+  rename(
+    Age = age,
+    Sex = sex,
+    Race = race,
+    Marital_Status = ms_recode,
+    Health_Insurance_Status = histatus,
+    Income = adjinc,
+    Mortality = inddea,
+    Cigarrette_smoking_Status = smokstat,
+    Smoked_100_Cigarettes = smok100,
+    Age_Started_Smoking = agesmk,
+    Current_Smokeless_Use = curruse_recode,
+    Ever_Smokeless_Use =  everuse_recode
+  )
+ds_sel <- ds_renamed %>%
+  dplyr::select(
+    Age, Sex, Race, Marital_Status, Health_Insurance_Status,
+    Income, Mortality,Cigarrette_smoking_Status, Smoked_100_Cigarettes,
+    Age_Started_Smoking, Current_Smokeless_Use, Ever_Smokeless_Use
+  )
+Race_labels <- c(
+  "1" = "White",
+  "2" = "Black",
+  "3" = "American Indian/Alaskan Native",
+  "4" = "Asian/Pacific Islander",
+  "5" = "Other"
+  )
+Marital_Status_labels <- c(
+  "0" = "Not married/Separated",
+  "1" = "Married"
+)
+Health_Insurance_Status_labels <- c(
+  "1" = "Insured",
+  "0" = "Uninsured"
+)
+Cigarrette_smoking_Status_labels <- c(
+  "1" = "Never Smoker",
+  "2" = "Everyday Smoker",
+  "3" = "Someday Smoker",
+  "4" = "Former_smoker"
+)
+Smoked_100_Cigarettes_labels <- c(
+  "1" = "Yes",
+  "2" = "No"
+)
+Current_Smokeless_Use_labels <- c(
+  "0" = "No",
+  "1" = "Yes"
+)
+
+Ever_Smokeless_Use_labels <- c(
+  "0" = "Never used",
+  "1" = "Ever used"
+)
+ds_sel <- ds_sel %>%
+  mutate(
+    Race = factor(Race, levels = names(Race_labels), labels = Race_labels),
+    Marital_Status = factor(Marital_Status, levels = names(Marital_Status_labels),
+                            labels = Marital_Status_labels),
+    Health_Insurance_Status = factor(Health_Insurance_Status,
+                                     levels = names(Health_Insurance_Status_labels),
+                                     labels = Health_Insurance_Status_labels),
+    Cigarrette_smoking_Status = factor(Cigarrette_smoking_Status,
+                                       levels = names(Cigarrette_smoking_Status_labels),
+                                       labels = Cigarrette_smoking_Status_labels),
+    Smoked_100_Cigarettes = factor(Smoked_100_Cigarettes,
+                                   levels = names(Smoked_100_Cigarettes_labels),
+                                   labels = Smoked_100_Cigarettes_labels),
+    Current_Smokeless_Use = factor(Current_Smokeless_Use,
+                                   levels = names(Current_Smokeless_Use_labels),
+                                   labels = Current_Smokeless_Use_labels),
+    Ever_Smokeless_Use = factor(Ever_Smokeless_Use,
+                                levels = names(Ever_Smokeless_Use_labels),
+                                labels = Ever_Smokeless_Use_labels),
+    Mortality = factor(Mortality, levels=c(0,1), labels=c("Alive","Dead"))
+  )
+
+
+N_total <- ds_sel %>% summarise(n = n()) %>% collect() %>% pull(n)
+
+N_male <- ds_sel %>% filter(Sex == 1) %>%
+  summarise(n = n()) %>% collect() %>% pull(n)
+
+N_female <- ds_sel %>% filter(Sex == 2) %>%
+  summarise(n = n()) %>% collect() %>% pull(n)
+cat_summary <- function(varname) {
+  ds_sel %>%
+    group_by(Sex, !!sym(varname)) %>%
+    summarise(n = n()) %>%
+    collect() %>%
+    mutate(
+      percent = case_when(
+        Sex == 1 ~ round(n / N_male * 100, 1),
+        Sex == 2 ~ round(n / N_female * 100, 1)
+      ),
+      label = paste0(n, " (", percent, "%)"),
+      Variable = varname,
+      Level = as.character(!!sym(varname))  # factor → character labels
+    ) %>%
+    dplyr::select(Variable, Level, Sex, label)
+}
+
+
+
+num_summary <- function(varname) {
+  ds_sel %>%
+    group_by(Sex) %>%
+    summarise(
+      mean = mean(!!sym(varname), na.rm = TRUE),
+      sd = sd(!!sym(varname), na.rm = TRUE)
+    ) %>%
+    collect() %>%
+    mutate(
+      label = paste0(round(mean, 1), " (", round(sd, 1), ")"),
+      Variable = varname,
+      Level = NA
+    ) %>%
+    dplyr::select(Variable, Level, Sex, label)
+}
+cat_vars <- c("Race", "Marital_Status", "Health_Insurance_Status","Cigarrette_smoking_Status",
+              "Smoked_100_Cigarettes", "Current_Smokeless_Use",
+              "Ever_Smokeless_Use", "Mortality")
+
+num_vars <- c("Age", "Income", "Age_Started_Smoking")
+cat_list <- lapply(cat_vars, cat_summary)
+num_list <- lapply(num_vars, num_summary)
+
+cat_df <- bind_rows(cat_list)
+num_df <- bind_rows(num_list)
+
+final_table <- bind_rows(cat_df, num_df)
+
+final_table_wide <- final_table %>% 
+  pivot_wider( names_from = Sex, values_from = label, names_prefix = "Sex_" ) %>% 
+  rename( Male = Sex_1, Female = Sex_2 ) 
+final_table_wide <- final_table_wide %>% 
+  arrange(Variable) 
+
+```
+
+
+
+```{r}
+
+### making an elegant table
+
+library(knitr)
+library(kableExtra)
+library(dplyr)
+
+final_table_indent <- final_table_wide %>%
+  mutate(
+    Level = ifelse(is.na(Level), "&nbsp;&nbsp;&nbsp;&nbsp;NA",
+           paste0("&nbsp;&nbsp;&nbsp;&nbsp;", Level))  # <-- indentation
+  )
+final_table_indent <- final_table_indent %>%
+  mutate(
+    Male = ifelse(is.na(Male), "", Male),
+    Female = ifelse(is.na(Female), "", Female)
+  )
+
+final_table_indent %>%
+  arrange(Variable, Level) %>%
+  kable(
+    format = "html",
+    caption = paste0(
+      "Table 1. Descriptive Statistics Stratified by Sex<br>",
+      "<i>Male (N = ", format(N_male, big.mark=","), 
+      ") & Female (N = ", format(N_female, big.mark=","), ")</i>"
+    ),
+    col.names = c("Variable", "Level", "Male", "Female"),
+    escape = FALSE
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center",
+   font_size = 12
+  ) %>%
+  collapse_rows(columns = 1, valign = "top")%>%
+  footnote(
+    general = "1 n (%); Mean (SD)",
+    general_title = "",
+    footnote_as_chunk = TRUE
+  )
+saveRDS(final_table_indent, "final_table_indent.rds")
+
+
+
+
+```
+
+
+
+# Logistic Regression Analysis
+
+```{r}
+df <- ds %>%
+  dplyr::select(curruse,race, age, sex,ms,histatus,adjinc,inddea,smokstat,smok100,agesmk,everuse) %>%
+  collect()
+model_uni1 <- glm(inddea~ factor(smokstat),
+                  family = binomial,
+                  data = df)
+
+summary(model_uni1)
+exp(coef(model_uni1))       # Odds ratios
+
+```
+
+
+```{r}
+# full model
+# (curruse,race, age, sex,ms,histatus,adjinc,inddea,smokstat,smok100,agesmk,everuse)
+
+model_full <- glm(inddea~ factor(smokstat)+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms_recode),
+                  family = binomial,
+                  data = ds_mod)
+summary(model_full)
+exp(coef(model_full)) # Odds ratios
+
+```
+```{r}
+AIC(model_full)
+BIC(model_full)
+```
+```{r}
+
+#(curruse,race, age, sex,ms,histatus,adjinc,inddea,smokstat,smok100,agesmk,everuse)
+
+model1 <- glm(inddea ~ factor(smokstat) + age + factor(sex),
+              family = binomial, data = df)
+summary(model1)
+model2 <- glm(inddea ~ factor(smokstat) + factor(smok100) +
+                age + factor(sex) + factor(race),
+              family = binomial, data = df)
+summary(model2)
+model3 <- glm(inddea ~ factor(smokstat) + factor(smok100)
+                + age + factor(sex) + factor(race) + adjinc + ms,
+              family = binomial, data = df)
+summary(model3)
+model4 <- glm(inddea ~ agesmk +age +factor(sex) + factor(race),
+              family = binomial, data = df)
+
+summary(model4)
+
+model5 <- glm(inddea~ factor(smokstat)+ agesmk+age+factor(race)+factor(sex),
+                  family = binomial,
+                  data = df)
+summary(model5)
+
+model6 <- glm(inddea~ factor(smokstat)+age+factor(race)+factor(sex)+factor(histatus)
+               + adjinc + ms,
+                  family = binomial,
+                  data = df)
+summary(model6)
+unique(df$smok100)
+
+AIC(model_full,model1, model2, model3, model4, model5, model6)
+BIC(model_full,model1, model2, model3, model4, model5, model6)
+
+```
+
+```{r}
+table(df$smok100, useNA="ifany")
+table(df$smokstat, useNA="ifany")
+table(df$histatus, useNA="ifany")
+
+
+```
+
+```{r}
+### Final Models:
+## Univariate Regression
+model_uni1 <- glm(inddea~ factor(smokstat),
+                  family = binomial,
+                  data = df)
+
+summary(model_uni1)
+exp(coef(model_uni1))       # Odds ratios
+
+## Exposure : Smokestat, Reference = Never smoker
+model_full <- glm(inddea~ factor(smokstat)+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms_recode),
+                  family = binomial,
+                  data = ds_mod)
+summary(model_full)
+exp(coef(model_full)) # Odds ratios
+
+### Exposure : Duration (Smokestat + agesmk, Reference = everyday smoker)
+
+model7 <- glm(inddea ~ factor(smokstat)+ agesmk+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms_recode),
+                  family = binomial,
+                  data = ds_mod)
+summary(model7)
+exp(coef(model7)) # Odds ratios
+
+AIC(model_uni1,model_full, model7)
+BIC(model_uni1,model_full, model7)
+
+```
+
+```{r}
+
+##Results
+
+library(broom)
+library(dplyr)
+
+tidy_or <- function(model, model_name){
+  broom::tidy(model, conf.int = TRUE, conf.level = 0.95, exponentiate = TRUE,conf.method = "wald") %>%
+    mutate(
+      Model = model_name,
+      OR = estimate,
+      `95% CI` = paste0("(", round(conf.low, 2), ", ", round(conf.high, 2), ")"),
+      p = signif(p.value, 3)
+    ) %>%
+    select(Model, term, OR, `95% CI`, p)
+}
+tbl_uni  <- tidy_or(model_uni1,  "Univariate: Smokestat")
+tbl_full <- tidy_or(model_full, "Multivariable: Smokestat")
+tbl_dur  <- tidy_or(model7,     "Multivariable: Smoking Duration")
+results_all <- bind_rows(tbl_full, tbl_dur)
+results_all <- results_all %>%
+  mutate(term = recode(term,
+     "(Intercept)" = "Intercept",
+     "factor(smokstat)2" = "Smokestat: Everyday smoker",
+     "factor(smokstat)3" = "Smokestat: Some-days smoker",
+     "factor(smokstat)4" = "Smokestat: Former smoker",
+     "factor(race)2" = "Race: Category 2",
+     "factor(race)3" = "Race: Category 3",
+     "factor(race)4" = "Race: Category 4",
+     "factor(race)5" = "Race: Category 5",
+     "factor(sex)2"  = "Female (Ref = Male)",
+     "factor(histatus)1" = "Health insurance: Yes",
+     "adjinc" = "Income",
+     "agesmk" = "Age started smoking",
+     "age" = "Age (years)",
+     "factor(ms_recode)1" = "Marital status: Married",
+     "factor(ms_recode)2" = "Marital status: Unmarried/Separated"
+  ))
+library(kableExtra)
+
+results_all %>%
+  mutate(
+    OR = round(OR, 2),
+    p = ifelse(p < 0.001, "<0.001", as.character(p))
+  ) %>%
+  kable(
+    format = "html",
+    col.names = c("Model", "Variable", "OR", "95% CI", "p-value"),
+    caption = "Logistic Regression Models Evaluating the Association Between Smoking Behaviors and Mortality",
+    escape = FALSE
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  collapse_rows(columns = 1)  # groups by model
+library(tibble)
+
+model_fit <- tibble(
+  Model = c("Univariate", "Multivariable", "Smoking Duration"),
+  AIC = c(AIC(model_uni1), AIC(model_full), AIC(model7)),
+  BIC = c(BIC(model_uni1), BIC(model_full), BIC(model7))
+)
+
+model_fit %>%
+  kable(format="html", caption="Model Fit Statistics (AIC/BIC)") %>%
+  kable_styling(full_width = FALSE)
+
+
+saveRDS(results_all, "Regression_Results.rds")
+
+
+
+```
+
+
+
+
+
+
+```{r}
+### Interpretation Tables
+
+
+library(kableExtra)
+
+table_interpretation <- data.frame(
+  Predictor = c(
+    "Everyday smoker (vs never)", 
+    "Some-days smoker (vs never)", 
+    "Former smoker (vs never)",
+    "Age (per year)",
+    "Race:Black (vs White)",
+    "Race:American Indian/Alaskan Native (vs White)",
+    "Race:Asian/Pacific Islander(vs White)",
+    "Race: Other (vs White)",
+    "Female (vs Male)",
+    "Insured (vs Uninsured)",
+    "Income (per level increase)",
+    "Married (vs Separated/Not married)"
+  ),
+  Interpretation = c(
+    "119% higher mortality (OR=2.19)",
+    "78% higher mortality (OR=1.78)",
+    "37% higher mortality (OR=1.37)",
+    "9% increase in mortality per year (OR=1.09)",
+    "24% higher mortality (OR=1.24)",
+    "38% higher mortality (OR=1.38)",
+    "26% lower mortality (OR=0.74)",
+    "Not significant",
+    "43% lower mortality (OR=0.57)",
+    "17% higher mortality (OR=1.17)",
+    "5% lower mortality per income level (OR=0.95)",
+    "27% lower mortality (OR=0.73)"
+  )
+)
+
+table_interpretation %>%
+  kable(
+    format = "html",
+    caption = "Interpretation of Adjusted Odds Ratios for Mortality:Smoking Status",
+   col.names = c("Predictor", "Interpretation"),
+   escape = FALSE
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover"),
+    full_width = FALSE,
+    position = "center"
+  )
+
+```
+
+```{r}
+library(kableExtra)
+
+table_model7 <- data.frame(
+  Predictor = c(
+    "Someday smoker (vs Everyday Smoker)",
+    "Former smoker (vs Everyday Smoker)",
+    "Age started smoking (per year)",
+    "Age (per year)",
+    "Race:Black (vs White)",
+    "Race:American Indian/Alaskan Native (vs White)",
+    "Race:Asian/Pacific Islander(vs White)",
+    "Race: Other (vs White)",
+    "Female (vs Male)",
+    "Health insurance: Yes (vs No)",
+    "Income (per level)",
+    "Married (vs Seperated/Not married)"
+  ),
+  Interpretation = c(
+    "13.7% lower mortality (OR = 0.86)",
+    "38.8% lower mortality (OR = 0.61)",
+    "2.1% lower mortality per year started later (OR = 0.98)",
+    "9.4% higher mortality per year of age (OR = 1.09)",
+    "14.7% higher mortality (OR = 1.15)",
+    "27.9% higher mortality (OR = 1.28)",
+    "30.0% lower mortality (OR = 0.70)",
+    "Not significant (OR = 0.97)",
+    "35.7% lower mortality for females (OR = 0.64)",
+    "19.4% higher mortality (OR = 1.19)",
+    "5.9% lower mortality per income level (OR = 0.94)",
+    "22.4% lower mortality for married individuals (OR = 0.78)"
+  )
+)
+
+table_model7 %>%
+  kable(
+    format = "html",
+    caption = "Interpretation of Adjusted Odds Ratios: Smoking Status + Duration Model",
+    col.names = c("Predictor", "Interpretation"),
+    escape = FALSE
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center"
+  )
+
+
+
+```
+```{r}
+library(kableExtra)
+
+two_tables <- data.frame(
+Table2_SmokingStatusModel  = c(kable(table_interpretation, format="html")),
+Table3_SmokingStatusAndDurationModel = c(kable(table_model7, format="html"))
+)
+
+two_tables %>%
+kable("html", escape = FALSE) %>%
+kable_styling(full_width = TRUE) %>%
+column_spec(1, width = "50%") %>%
+column_spec(2, width = "50%")
+
+
+two_tables <- data.frame(
+  Table2_SmokingStatusModel = paste0(
+    "<div style='zoom:1.5;'>",
+    kable(table_interpretation, "html"),
+    "</div>"
+  ),
+  Table3_SmokingStatusAndDurationModel = paste0(
+    "<div style='zoom:1.5;'>",
+    kable(table_model7, "html"),
+    "</div>"
+  ),
+  check.names = FALSE
+)
+
+two_tables %>%
+  kable("html", escape = FALSE) %>%
+  kable_styling(full_width = TRUE) %>%
+  column_spec(1, width = "50%") %>%
+  column_spec(2, width = "50%")
+
+
+```
+
+
+
+

@@ -1,0 +1,84 @@
+---
+title: "EDA and Regression analysis_Indhira"
+date: "2025-12-06"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+# Methods
+
+## Descriptive Analysis
+
+We analyzed 493,282 participants from the NLMS Tobacco Use Cohort using a big-data workflow centered on Apache Arrow to enable efficient, memory-safe processing of the large dataset. The raw CSV file was converted to Parquet and loaded as an Arrow Dataset, allowing fast, columnar I/O, lazy evaluation, and on-disk querying without importing the entire file into memory—an approach far more efficient than base R, which fully materializes data frames and incurs substantially higher memory and compute costs. We used Arrow and dplyr to subset variables, perform grouped operations, and collect only the necessary columns into R for recoding. Smokeless tobacco variables (CURRUSE, EVERUSE) were recoded into binary indicators based on digit patterns, and marital status was collapsed into two categories (married, not married/separated). Labeled factor variables were created for readability. Descriptive statistics were computed stratified by sex, with categorical variables summarized using counts and percentages and continuous variables using means and standard deviations. A formatted Table 1 was generated using kableExtra to present all variables with clear labels and hierarchical indentation.
+
+## Regression Analysis
+
+### Variable Selection
+
+Covariates were selected a priori based on established epidemiological evidence demonstrating their associations with both smoking behavior and mortality. Age is a strong determinant of baseline mortality risk (Arias & Xu, 2022), while sex differences in survival are well-documented (Kruger & Nesse, 2006). Race/ethnicity influences mortality through structural and socioeconomic inequities (Williams & Mohammed, 2009). Socioeconomic status, particularly income, is closely linked to life expectancy (Chetty et al., 2016). Health insurance status affects access to healthcare and subsequently mortality risk (Wilper et al., 2009). Marital status is included due to its protective association with lower mortality (Rendall et al., 2011). Smoking duration, measured by age at initiation, has also been shown to independently influence long-term mortality (USDHHS, 2014).
+
+### Logistic Regression
+
+We evaluated the association between cigarette smoking behavior and mortality using logistic regression models applied to the NLMS Tobacco Use dataset. Mortality (inddea) was modeled as a binary outcome. Two main exposures were examined: (1) smoking status (never, everyday, some-days, former) and (2) smoking status plus smoking duration, operationalized using age at smoking initiation (agesmk). Covariates selected a priori based on demographic and socioeconomic relevance included age, race, sex, health insurance status, income, and marital status.
+
+#### Model 1 : Smoking Status
+
+$$
+\text{logit}\big[P(\text{Death}_i = 1)\big] 
+= \beta_0 
++ \beta_1\,\text{Smokestat}_i
++ \beta_2\,\text{Age}_i
++ \beta_3\,\text{Race}_i
++ \beta_4\,\text{Sex}_i
++ \beta_5\,\text{Insurance}_i
++ \beta_6\,\text{Income}_i
++ \beta_7\,\text{MaritalStatus}_i 
+$$
+
+#### Model 2: Smoking Status+Snoking Duration
+
+$$
+\text{logit}\big[P(\text{Death}_i = 1)\big] = \gamma_0 + \gamma_1\,\text{Smokestat}_i + \gamma_2\,\text{AgeStartedSmoking}_i + \gamma_3\,\text{Age}_i + \gamma_4\,\text{Race}_i
+$$ $$         
+         + \gamma_5\,\text{Sex}_i + \gamma_6\,\text{Insurance}_i + \gamma_7\,\text{Income}_i + \gamma_8\,\text{MaritalStatus}_i
+$$
+
+All models were fit using generalized linear models with a binomial distribution and logit link in R. A univariate model estimated the crude association between smoking status and mortality, followed by multivariable models adjusting for confounders. Model performance was compared and selected using AIC and residual deviance. Odds ratios and 95% confidence intervals were computed by exponentiating model coefficients. Missing data were handled using complete-case analysis to ensure comparability across models.
+
+# Results
+
+## Descriptive Analysis
+
+The analytic sample included 493,282 participants, with 230,967 males and 262,315 females. The sex-stratified descriptive statistics showed broadly similar age distributions between groups, while race, income, and health insurance patterns exhibited modest variation. Marital status differed by sex, with a higher proportion of males classified as married and females more frequently not married or separated. Tobacco-related behaviors demonstrated clear sex patterns: males reported higher rates of current and ever use of smokeless tobacco and were more likely to have smoked at least 100 cigarettes. The mean age of smoking initiation was slightly lower among males. Mortality proportions also varied slightly by sex. Overall, Table 1 summarizes these demographic, socioeconomic, and tobacco-use differences, providing a foundational characterization of the NLMS tobacco cohort prior to inferential analysis.
+
+| ![](summ1.png){width="50%"}  ![](summ2.png){width="50%"} 
+
+## Logistic Regression
+
+![](reg_results_table.png)
+
+In the model adjusting for demographic and socioeconomic covariates, cigarette smoking status showed a strong graded association with mortality. Compared with never smokers, everyday smokers had more than double the odds of death (OR = 2.19), some-day smokers had 78% higher odds (OR = 1.78), and former smokers had 37% higher odds (OR = 1.37), demonstrating a clear dose–response pattern (Table 2).
+
+When age at smoking initiation was added to the model, the associations shifted. After adjustment, some-day smokers showed approximately 14% lower odds of mortality (OR = 0.86) and former smokers showed approximately 39% lower odds (OR = 0.61) relative to everyday smokers, likely reflecting differences in cumulative smoking duration. Age at smoking initiation was independently associated with mortality, with each additional year of later initiation reducing mortality risk by about 2% (Table 3).
+
+Across both models, age, sex, income, race, and marital status remained strong independent predictors. Age showed the largest effect, with each additional year associated with roughly 9% higher mortality risk. Females had substantially lower mortality (about 36–43% lower), while higher income and being married were consistently protective. Race differences persisted, with several groups showing higher or lower mortality risks relative to the reference category.
+
+Overall, smoking status was a robust predictor of mortality, and incorporating smoking duration through age at initiation refined these associations. These findings suggest that both current smoking behavior and lifetime smoking history contribute meaningfully to mortality risk.
+
+# References
+
+Arias, E., & Xu, J. Q. (2022). United States life tables, 2019 (National Vital Statistics Reports, Vol. 70, No. 19). National Center for Health Statistics. <https://doi.org/10.15620/cdc:113096>
+
+Kruger, D. J., & Nesse, R. M. (2006). An evolutionary life-history framework for understanding sex differences in human mortality rates. Evolutionary Psychology, 4(1), 66–85. <https://doi.org/10.1177/147470490600400114>
+
+Williams, D. R., & Mohammed, S. A. (2009). Discrimination and racial disparities in health: Evidence and needed research. Journal of Behavioral Medicine, 32(1), 20–47. <https://doi.org/10.1007/s10865-008-9185-0>
+
+Chetty, R., Stepner, M., Abraham, S., Lin, S., Scuderi, B., Turner, N., Bergeron, A., & Cutler, D. (2016). The association between income and life expectancy in the United States, 2001–2014. JAMA, 315(16), 1750–1766. <https://doi.org/10.1001/jama.2016.4226>
+
+Wilper, A. P., Woolhandler, S., Lasser, K. E., McCormick, D., Bor, D. H., & Himmelstein, D. U. (2009). Health insurance and mortality in US adults. American Journal of Public Health, 99(12), 2289–2295. <https://doi.org/10.2105/AJPH.2008.157685>
+
+Rendall, M. S., Weden, M. M., Favreault, M. M., & Waldron, H. (2011). The protective effect of marriage for survival: A review and update. Demography, 48(2), 481–506. <https://doi.org/10.1007/s13524-011-0032-5>
+
+U.S. Department of Health and Human Services. (2014). The health consequences of smoking—50 years of progress: A report of the Surgeon General. <https://www.ncbi.nlm.nih.gov/books/NBK179276/>
