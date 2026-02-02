@@ -1,0 +1,171 @@
+---
+title: "ML prediction of Mortality"
+output: html_document
+date: "2026-01-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## Loading the libraries
+library(kableExtra)
+library(bench)
+library(dplyr)
+library(knitr)
+library(data.table)
+#install.packages("arrow")
+library(arrow)
+library(tidyr)
+```
+
+
+
+```{r}
+ldata_fread <- fread("tu_new.csv")
+str(ldata_fread)
+
+###We used Apache Arrow and the Parquet format because the NLMS Tobacco Use dataset is large (~493,000 observations with many variables), and base R data handling becomes inefficient and memory-intensive at this scale.
+
+write_parquet(ldata_fread, "tu_new.parquet")
+ds <- open_dataset("tu_new.parquet")
+```
+
+```{r}
+
+df <- ds %>%
+  dplyr::select(curruse,race, age, sex,ms,histatus,adjinc,inddea,smokstat,smok100,agesmk,everuse) %>%
+  collect()
+
+ds_mod <- df %>%
+  mutate(
+    curruse = as.character(curruse),
+    curruse_recode = case_when(
+      grepl("1", curruse) ~ 1,  # any “1” anywhere → Yes
+      curruse == "22222" ~ 0,   # all “2”s → No
+      TRUE ~ NA_real_           # any “9” or invalid → Missing
+    )
+    )%>%
+    mutate(
+    everuse = as.character(everuse),
+    everuse_recode = case_when(
+      grepl("1", everuse) ~ 1,          # any “1” anywhere → Yes
+      everuse == "22222" ~ 0,           # all “2”s → No
+      TRUE ~ NA_real_                   # any “9” or invalid → Missing
+    )
+    )%>%
+   mutate(
+    ms_recode = case_when(
+      ms == 1 ~ 1,                # Married
+      ms %in% c(2, 3,4,5) ~ 0,     # Widowed, Separated,Divorced, Never married → Not married
+      TRUE ~ NA_real_             # Missing or unknown
+    )
+  )
+
+
+```
+
+
+```{r}
+set.seed(123)
+
+n <- nrow(ds_mod)
+n
+train_index <- sample(1:n, size = 0.7 * n)
+
+train_data <- ds_mod[train_index, ]
+nrow(train_data)
+head(train_data)
+test_data  <- ds_mod[-train_index, ]
+nrow(test_data)
+head(test_data)
+
+class(train_data$smokstat)
+unique(train_data$smokstat)
+unique(test_data$smokstat)
+
+# For smokstat
+test_data$smokstat <- factor(test_data$smokstat, levels = levels(train_data$smokstat))
+
+# For race
+test_data$race <- factor(test_data$race, levels = levels(train_data$race))
+
+# For sex
+test_data$sex <- factor(test_data$sex, levels = levels(train_data$sex))
+
+# For histatus
+test_data$histatus <- factor(test_data$histatus, levels = levels(train_data$histatus))
+
+# For ms_recode
+test_data$ms_recode <- factor(test_data$ms_recode, levels = levels(train_data$ms_recode))
+
+factor_vars <- c("smokstat", "race", "sex", "histatus", "ms_recode")
+
+for (v in factor_vars) {
+  train_data[[v]] <- factor(train_data[[v]])
+  test_data[[v]] <- factor(test_data[[v]], levels = levels(train_data[[v]]))
+}
+
+# Optionally remove rows with NA in predictors (or impute)
+train_data <- na.omit(train_data)
+test_data <- na.omit(test_data)
+
+## Exposure : Smokestat, Reference = Never smoker
+model_smoking <- glm(inddea~ smokstat+ age + race+sex+histatus+adjinc+ms_recode,
+                  family = binomial,
+                  data = train_data)
+summary(model_smoking)
+exp(coef(model_smoking)) # Odds ratios
+
+
+# Now predict
+pred_prob_m1 <- predict(model_smoking, newdata = test_data, type = "response")
+
+
+
+library(pROC)
+roc(test_data$inddea, pred_prob_m1)
+plot(roc(test_data$inddea, pred_prob_m1), col="blue", main="ROC Curve Model 1")
+
+### Exposure : Duration (Smokestat + agesmk, Reference = everyday smoker)
+
+model_smoking_duration <- glm(inddea ~ smokstat+ agesmk+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms_recode),
+                  family = binomial,
+                  data = train_data)
+summary(model_smoking_duration)
+exp(coef(model_smoking_duration)) # Odds ratios
+
+pred_prob_m2 <- predict(model_smoking_duration, newdata = test_data, type = "response")
+pred_prob_m2
+pred_class_m2 <- ifelse(pred_prob_m2 > 0.7, 1, 0)
+roc(test_data$inddea, pred_class_m1)
+roc(test_data$inddea, pred_class_m2)
+
+
+roc1 <- roc(test_data$inddea, pred_prob_m1)
+roc2 <- roc(test_data$inddea, pred_prob_m2)
+roc.test(roc1, roc2)  # test if the difference in AUC is significant
+
+
+AIC(model_smoking, model_smoking_duration)
+BIC(model_smoking, model_smoking_duration)
+```
+
+
+```{r}
+sum(complete.cases(test_data))
+
+names(test_data)
+names(train_data)
+levels(train_data$smokstat)
+levels(test_data$smokstat)
+
+
+pred_prob_m1 <- predict(model_smoking, newdata = train_data, type = "response")
+pred_prob_m1
+pred_prob_m2 <- predict(model_smoking, newdata = test_data, type = "response")
+pred_prob_m2
+
+```
+
