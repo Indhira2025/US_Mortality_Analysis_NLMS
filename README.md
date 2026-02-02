@@ -1,9 +1,7 @@
-Title: Modeling of Smoking-Related Mortality: A Big-Data Analysis of the NLMS (National Longitudinal Mortality Study) Tobacco-Use Cohort in the U.S.
+# Predicting Mortality Risk from Cigarette Smoking Using Machine Learning and Interpretable Statistical Models
 
-Rationale: Cigarette smoking remains one of the leading preventable causes of death worldwide, driving excess mortality from cardiovascular disease, cancer, and respiratory illnesses. Understanding how smoking duration interacts with demographic, socioeconomic, and lifestyle factors to influence mortality risk is essential for developing targeted public health interventions. Large national cohorts, such as the NLMS PUMS(Public Use Microdata Sample) Tobacco-Use Cohort, provide a unique opportunity to examine these associations using modern analytical tools.
+Rationale: Cigarette smoking is a major contributor to preventable mortality worldwide, yet substantial heterogeneity exists in smoking behaviors and associated health risks. Accurately predicting mortality risk across diverse smoking profiles is critical for effective risk stratification and targeted intervention. While traditional statistical models offer interpretability, they are often not optimized for predictive performance, whereas machine learning approaches emphasize risk prediction but may lack transparency
 
-Objectives: The primary goal of this project is to characterize and predict mortality risk among smokers while accounting for demographic and socioeconomic characteristics. Key research questions include:
-1.	How does time since smoking initiation relate to 5-year mortality risk?
-2.	Which demographic or socioeconomic factors (income, education, race, etc.) modify the smoking–mortality association?
-3.	Can we build accurate and interpretable models to predict mortality risk among smokers?
-4.	What are the most influential factors in mortality prediction?
+Objective: The goal of this analysis is to develop and evaluate predictive models for mortality risk associated with cigarette smoking, prioritizing accurate risk stratification and subsequently using statistical models to provide interpretable insights into key risk factors.  
+
+Dataset: US National Longitudinal Mortality Study (NLMS) Public Use Microdata Sample (PUMS) Tobacco Use Cohort (dataset filename : tu) - 493,282 observations of 43 different variables including demographic information, socioeconomic factors, and smoking behaviors (5 year follow-up data)
