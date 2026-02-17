@@ -79,50 +79,33 @@ nrow(train_data)
 head(train_data)
 test_data  <- ds_mod[-train_index, ]
 nrow(test_data)
-head(test_data)
+#View(test_data)
 
 class(train_data$smokstat)
 unique(train_data$smokstat)
 unique(test_data$smokstat)
 
-# For smokstat
-test_data$smokstat <- factor(test_data$smokstat, levels = levels(train_data$smokstat))
+train_data$smokstat <- factor(train_data$smokstat)
+train_data$smokstat
+test_data$smokstat <- factor(test_data$smokstat)
+test_data$smokstat
+sum(complete.cases(train_data))
+sum(complete.cases(test_data))
 
-# For race
-test_data$race <- factor(test_data$race, levels = levels(train_data$race))
 
-# For sex
-test_data$sex <- factor(test_data$sex, levels = levels(train_data$sex))
-
-# For histatus
-test_data$histatus <- factor(test_data$histatus, levels = levels(train_data$histatus))
-
-# For ms_recode
-test_data$ms_recode <- factor(test_data$ms_recode, levels = levels(train_data$ms_recode))
-
-factor_vars <- c("smokstat", "race", "sex", "histatus", "ms_recode")
-
-for (v in factor_vars) {
-  train_data[[v]] <- factor(train_data[[v]])
-  test_data[[v]] <- factor(test_data[[v]], levels = levels(train_data[[v]]))
-}
-
-# Optionally remove rows with NA in predictors (or impute)
-train_data <- na.omit(train_data)
-test_data <- na.omit(test_data)
 
 ## Exposure : Smokestat, Reference = Never smoker
-model_smoking <- glm(inddea~ smokstat+ age + race+sex+histatus+adjinc+ms_recode,
+model_smoking <- glm(inddea~ smokstat + age + factor(race) +sex+ factor(histatus) +adjinc + factor(ms_recode),
                   family = binomial,
                   data = train_data)
 summary(model_smoking)
 exp(coef(model_smoking)) # Odds ratios
 
-
+test_data <- na.omit(test_data)
 # Now predict
 pred_prob_m1 <- predict(model_smoking, newdata = test_data, type = "response")
 
-
+pred_prob_m1 
 
 library(pROC)
 roc(test_data$inddea, pred_prob_m1)
@@ -138,9 +121,7 @@ exp(coef(model_smoking_duration)) # Odds ratios
 
 pred_prob_m2 <- predict(model_smoking_duration, newdata = test_data, type = "response")
 pred_prob_m2
-pred_class_m2 <- ifelse(pred_prob_m2 > 0.7, 1, 0)
-roc(test_data$inddea, pred_class_m1)
-roc(test_data$inddea, pred_class_m2)
+
 
 
 roc1 <- roc(test_data$inddea, pred_prob_m1)
@@ -152,20 +133,183 @@ AIC(model_smoking, model_smoking_duration)
 BIC(model_smoking, model_smoking_duration)
 ```
 
+```{r}
+# Install if needed
+#install.packages("caret")
+library(caret)
+set.seed(123)
+
+
+# Convert outcome to factor for classification
+ds_mod$inddea <- factor(ds_mod$inddea, levels = c(0,1))
+n <- nrow(ds_mod)
+n
+train_index <- sample(1:n, size = 0.7 * n)
+
+train_data <- ds_mod[train_index, ]
+nrow(train_data)
+head(train_data)
+test_data  <- ds_mod[-train_index, ]
+nrow(test_data)
+
+train_data$smokstat <- factor(train_data$smokstat)
+train_data$smokstat
+test_data$smokstat <- factor(test_data$smokstat)
+test_data$smokstat
+
+# Define 5-fold CV
+train_control <- trainControl(
+  method = "cv",   # cross-validation
+  number = 5,      # 5 folds
+  classProbs = TRUE, # needed if you want probabilities
+  summaryFunction = twoClassSummary # allows AUC calculation
+)
+
+train_data <- na.omit(train_data)
+test_data <- na.omit(test_data)
+
+
+train_data$inddea <- factor(train_data$inddea, levels = c(0,1), labels = c("No", "Yes"))
+test_data$inddea  <- factor(test_data$inddea, levels = c(0,1), labels = c("No", "Yes"))
+
+# Train logistic regression with 5-fold CV
+set.seed(123) # for reproducibility
+cv_model1 <- train(
+  inddea ~  smokstat + age + factor(race) +sex+ factor(histatus) +adjinc + factor(ms_recode),
+  data = train_data,
+  method = "glm",
+  family = "binomial",
+  trControl = train_control,
+  metric = "ROC" # optimize based on AUC
+)
+
+# View CV results
+cv_model1
+
+cv_model2 <- train(
+  inddea ~ smokstat+ agesmk+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms_recode),
+  data = train_data,
+  method = "glm",
+  family = "binomial",
+  trControl = train_control,
+  metric = "ROC" # optimize based on AUC
+)
+
+# View CV results
+cv_model2
+
+## predicting the probabilities
+pred_probs1 <- predict(cv_model1, newdata = test_data, type = "prob")$Yes
+pred_probs2 <- predict(cv_model2, newdata = test_data, type = "prob")$Yes
+
+## Checking ROC
+rocCV1 <- roc(test_data$inddea, pred_probs1)
+rocCV2 <- roc(test_data$inddea, pred_probs2)
+roc.test(rocCV1, rocCV2)
+
+# ROC Plot
+plot(rocCV1, col = "blue", main = "ROC Curve: Model Comparison")
+lines(rocCV2, col = "red")
+legend("bottomright", legend = c("Model 1: smokstat", "Model 2: smokstat+agesmk"),
+       col = c("blue", "red"), lwd = 2)
+
+```
+
+
+
 
 ```{r}
-sum(complete.cases(test_data))
 
-names(test_data)
-names(train_data)
-levels(train_data$smokstat)
-levels(test_data$smokstat)
+# Smoking model
+cutoff_10_1 <- quantile(pred_prob_m1, 0.90)
+pred_class_top10 <- ifelse(pred_prob_m1 >= cutoff_10_1, 1, 0)
+cm_top10 <- table(
+  Predicted = pred_class_top10,
+  Actual = test_data$inddea
+)
+cm_top10
+TP <- cm_top10["1","1"]
+FP <- cm_top10["1","0"]
+
+precision_top10 <- TP / (TP + FP)
+precision_top10
+
+# smoking + duration model
+cutoff_10_2 <- quantile(pred_prob_m2, 0.90)
+pred_class_top10_2 <- ifelse(pred_prob_m2 >= cutoff_10_2, 1, 0)
+cm_top10_2 <- table(
+  Predicted = pred_class_top10_2,
+  Actual = test_data$inddea
+)
+cm_top10_2
+TP <- cm_top10_2["1","1"]
+FP <- cm_top10_2["1","0"]
+
+precision_top10_2 <- TP / (TP + FP)
+precision_top10_2
+
+```
 
 
-pred_prob_m1 <- predict(model_smoking, newdata = train_data, type = "response")
-pred_prob_m1
-pred_prob_m2 <- predict(model_smoking, newdata = test_data, type = "response")
-pred_prob_m2
+```{r}
+precision_at_k <- function(pred_prob, outcome, k) {
+  cutoff <- quantile(pred_prob, 1 - k)
+  pred_class <- ifelse(pred_prob >= cutoff, 1, 0)
+  
+  cm <- table(Predicted = pred_class, Actual = outcome)
+  
+  TP <- cm["1", "1"]
+  FP <- cm["1", "0"]
+  
+  precision <- TP / (TP + FP)
+  return(precision)
+}
+ks <- c(0.05, 0.10, 0.20)
+
+precision_m1 <- sapply(ks, precision_at_k,
+                        pred_prob = pred_prob_m1,
+                        outcome = test_data$inddea)
+
+precision_m2 <- sapply(ks, precision_at_k,
+                        pred_prob = pred_prob_m2,
+                        outcome = test_data$inddea)
+
+data.frame(
+  Risk_Percentile = c("Top 5%", "Top 10%", "Top 20%"),
+  Smoking_Only = precision_m1,
+  Smoking_Duration = precision_m2
+)
+plot_df <- data.frame(
+  Percentile = rep(c(5, 10, 20), 2),
+  Precision = c(precision_m1, precision_m2),
+  Model = rep(c("Smoking only", "Smoking + duration"), each = 3)
+)
+library(ggplot2)
+
+ggplot(plot_df, aes(x = Percentile, y = Precision, color = Model)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = c(5, 10, 20)) +
+  labs(
+    x = "High-risk group (Top % of predicted risk)",
+    y = "Precision (PPV)",
+    title = "Precision across high-risk percentiles"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+baseline_rate <- mean(test_data$inddea, na.rm = TRUE)
+baseline_rate
+lift_m1 <- precision_m1 / baseline_rate
+lift_m2 <- precision_m2 / baseline_rate
+
+data.frame(
+  Risk_Percentile = c("Top 5%", "Top 10%", "Top 20%"),
+  Lift_Smoking_Only = lift_m1,
+  Lift_Smoking_Duration = lift_m2
+)
 
 ```
 

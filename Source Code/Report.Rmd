@@ -1,0 +1,139 @@
+---
+title: "Prediction_Stat"
+output: html_document
+date: "2026-02-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Predicting Mortality Risk from Cigarette Smoking Using Machine Learning and Interpretable Statistical Models
+
+## Abstract
+
+### Background
+
+Cigarette smoking is a major contributor to preventable mortality worldwide, yet substantial heterogeneity exists in smoking behaviors and associated health risks. Accurately predicting mortality risk across diverse smoking profiles is critical for effective risk stratification and targeted intervention. While traditional statistical models offer interpretability, they are often not optimized for predictive performance, whereas machine learning approaches emphasize risk prediction but may lack transparency
+
+### Objective
+
+The goal of this study is to develop and evaluate predictive models for mortality risk associated with cigarette smoking, prioritizing accurate risk stratification and subsequently using statistical models to provide interpretable insights into key risk factors.
+
+# Dataset
+
+Data Acquisition and Description 
+The National Longitudinal Mortality Study (NLMS) Public Use Microdata Sample (PUMS) Tobacco Use Cohort (dataset filename : tu) contains 493,282 participants who were tracked over a five year period. Forty-three different variables including demographic information, socioeconomic factors, and smoking behaviors were collected for each individual. Importantly, the death indicator column (`inddea` = 1 if deceased, 0 otherwise)) reported whether an individual was alive or deceased at the end of the follow up period. Data was acquired from the NIH-Biologic Specimen and Data Repository Information Coordinating Center under request number 17175 and used for this analysis.
+
+# Exposures and Covariates
+
+The main exposures of interest were:\
+1. Smoking status (smokstat), categorized as never, everyday, some-days, or former smokers.\
+2. Smoking duration, operationalized using age at smoking initiation (agesmk).
+
+Additional covariates included age, sex, race/ethnicity (race), marital status (ms_recode), health insurance status (histatus), and adjusted income (adjinc). Categorical covariates were encoded as factors for model inclusion.
+
+# Predictive Modeling Approach:
+
+## Methods
+
+Data Splitting: The cohort was divided into training (≈70%) and test (≈30%) subsets. Observations with missing predictor values were removed prior to model fitting to ensure valid probability estimation. Model Specification: Two logistic regression–based predictive models were developed:
+
+**MODEL 1:** Smoking Status
+
+$$
+\text{logit}\big[P(\text{Death}_i = 1)\big] 
+= \beta_0 
++ \beta_1\,\text{Smokestat}_i
++ \beta_2\,\text{Age}_i
++ \beta_3\,\text{Race}_i
++ \beta_4\,\text{Sex}_i
++ \beta_5\,\text{Insurance}_i
++ \beta_6\,\text{Income}_i
++ \beta_7\,\text{MaritalStatus}_i 
+$$
+
+**MODEL 2:** Smoking Status + Smoking Duration
+
+$$
+\text{logit}\big[P(\text{Death}_i = 1)\big] = \gamma_0 + \gamma_1\,\text{Smokestat}_i + \gamma_2\,\text{AgeStartedSmoking}_i + \gamma_3\,\text{Age}_i + \gamma_4\,\text{Race}_i
+$$
+
+$$         
+         + \gamma_5\,\text{Sex}_i + \gamma_6\,\text{Insurance}_i + \gamma_7\,\text{Income}_i + \gamma_8\,\text{MaritalStatus}_i
+$$
+
+Prediction and Risk Stratification: Predicted probabilities were generated for the test dataset using the predict() function with type = "response". Individuals were ranked based on predicted mortality risk, and high-risk groups were defined at the top 10% percentiles.
+
+Evaluation Metrics:
+
+Discrimination: Area under the receiver operating characteristic curve (AUC) using the pROC package. DeLong’s test was used to compare AUCs between models.
+
+Precision in high-risk groups: Proportion of true deaths among individuals in the top predicted risk percentiles.
+
+Lift: Ratio of precision in high-risk groups to the overall event rate, indicating enrichment over baseline mortality.
+
+# Statistical Modeling for Interpretation
+
+To complement prediction, logistic regression models were used for effect estimation and interpretability:
+
+Coefficients were exponentiated to generate odds ratios (ORs) with 95% confidence intervals.
+
+Model fit was evaluated using Akaike Information Criterion (AIC) and Bayesian Information Criterion (BIC).
+
+Differences in model fit and predictive performance were interpreted in the context of smoking behavior (status and duration) and demographic covariates, providing insight into the key determinants of mortality risk.
+
+
+
+
+
+
+
+```{r}
+final_table_indent <- readRDS("final_table_indent.rds")
+
+# Now you can use it in your Rmd document
+final_table_indent
+
+### making an elegant table
+
+library(knitr)
+library(kableExtra)
+library(dplyr)
+
+final_table_indent <- final_table_wide %>%
+  mutate(
+    Level = ifelse(is.na(Level), "&nbsp;&nbsp;&nbsp;&nbsp;NA",
+           paste0("&nbsp;&nbsp;&nbsp;&nbsp;", Level))  # <-- indentation
+  )
+final_table_indent <- final_table_indent %>%
+  mutate(
+    Male = ifelse(is.na(Male), "", Male),
+    Female = ifelse(is.na(Female), "", Female)
+  )
+
+final_table_indent %>%
+  arrange(Variable, Level) %>%
+  kable(
+    format = "html",
+    caption = paste0(
+      "Table 1. Descriptive Statistics Stratified by Sex<br>",
+      "<i>Male (N = ", format(N_male, big.mark=","), 
+      ") & Female (N = ", format(N_female, big.mark=","), ")</i>"
+    ),
+    col.names = c("Variable", "Level", "Male", "Female"),
+    escape = FALSE
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center",
+   font_size = 12
+  ) %>%
+  collapse_rows(columns = 1, valign = "top")%>%
+  footnote(
+    general = "1 n (%); Mean (SD)",
+    general_title = "",
+    footnote_as_chunk = TRUE
+  )
+```

@@ -54,6 +54,59 @@ Benchmarking demonstrated that fread() provided substantial gains in computation
 
 ```{r}
 
+#Comparing the processing time
+
+library(bench)
+library(arrow)
+library(data.table)
+
+bench_results <- bench::mark(
+  
+  read_csv = {
+    as.data.frame(read.csv("tu_new.csv"))
+  },
+  
+  fread = {
+    as.data.frame(data.table::fread("tu_new.csv"))
+  },
+  
+  arrow_parquet = {
+    open_dataset("tu_new.parquet") |> 
+      collect() |> 
+      as.data.frame()
+  },
+  
+  iterations = 3,   # use >1 for more stable results
+  check = FALSE
+)
+
+bench_results
+
+bench_tbl <- bench_results %>%
+  mutate(
+    Method = as.character(expression),
+    Runtime = format(min, digits = 3),
+    Memory = format(mem_alloc, units = "auto"),
+    GC = n_gc
+  ) %>%
+  select(Method, Runtime, Memory, GC)
+bench_tbl %>%
+  kable("html", 
+        caption = "Benchmark Comparison of Data Loading Methods") %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE, background = "#f0f0f0") %>%
+  column_spec(1, bold = TRUE)
+
+
+```
+
+```{r}
+## Reading the data
+
 ldata_fread <- fread("tu_new.csv")
 str(ldata_fread)
 
@@ -61,23 +114,26 @@ str(ldata_fread)
 
 write_parquet(ldata_fread, "tu_new.parquet")
 ds <- open_dataset("tu_new.parquet")
-
+nrow(ds)
 ```
-
 
 ```{r}
-ds %>%
-  group_by(sex) %>%
-  summarise(mortality_rate = mean(inddea)) %>%
-  collect()
+# Death stratifiaction by gender
 
-schema(ds)
+ds_gender <- ds %>%
+  select(sex, inddea) %>%
+  mutate (sex = case_when(sex == 1 ~ "Male",
+                          sex == 2 ~ "Female",
+                          TRUE ~ "Unknown")) %>%
+  group_by(sex) %>%
+  summarise(mortality_rate = round(mean(inddea),2)) %>%
+  collect()
+  
+  
+
+#schema(ds)
 ```
 
-Arrow processes only required columns
-Arrow scans data in chunks
-Computations push down to C++ backend
-No full dataset in memory
 
 ```{r}
 ### Descriptive Analysis
@@ -359,10 +415,12 @@ summary(model_full)
 exp(coef(model_full)) # Odds ratios
 
 ```
+
 ```{r}
 AIC(model_full)
 BIC(model_full)
 ```
+
 ```{r}
 
 #(curruse,race, age, sex,ms,histatus,adjinc,inddea,smokstat,smok100,agesmk,everuse)
@@ -656,6 +714,27 @@ two_tables %>%
   kable_styling(full_width = TRUE) %>%
   column_spec(1, width = "50%") %>%
   column_spec(2, width = "50%")
+
+
+```
+
+
+```{r}
+time_model_base <- system.time({
+  model_base <- glm(inddea~ factor(smokstat)+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms),
+                  family = binomial,
+                  data = ds_base)
+})
+
+time_model_arrow <- system.time({
+  model_full <- glm(inddea~ factor(smokstat)+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms_recode),
+                  family = binomial,
+                  data = ds_mod)
+})
+
+
+time_model_base
+time_model_arrow 
 
 
 ```
