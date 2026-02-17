@@ -24,32 +24,8 @@ library(tidyr)
 
 ### Data Importing
 
-To efficiently load and preprocess the NLMS Tobacco-Use dataset (~493,000 observations and 43 variables), we compared the performance of base R’s read.csv() with the optimized fread() function from the data.table package.
-```{r}
-bench_results <- bench::mark(
-  read_csv = as.data.frame(read.csv("tu_new.csv")),
-  fread = as.data.frame(data.table::fread("tu_new.csv")),
-  iterations = 1
-)
-bench_tbl <- bench_results %>%
-  mutate(
-    Method = as.character(expression),
-    Runtime = format(min, digits = 3),
-    Memory = format(mem_alloc, units = "auto"),
-    GC = n_gc
-  ) %>%
-  select(Method, Runtime, Memory, GC)
-bench_tbl %>%
-  kable("html", 
-        caption = "Benchmark Comparison of Data Loading Methods") %>%
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed"),
-    full_width = FALSE,
-    position = "center"
-  ) %>%
-  row_spec(0, bold = TRUE, background = "#f0f0f0") %>%
-  column_spec(1, bold = TRUE)
-```
+To efficiently load and preprocess the NLMS Tobacco-Use dataset (~493,000 observations and 43 variables), we compared the performance of base R’s read.csv() with the optimized fread() from the data.table package and Arrow/Parquet function.
+
 Benchmarking demonstrated that fread() provided substantial gains in computational efficiency, completing the data import in 80 milliseconds compared with 3.08 seconds using read.csv(), indicating fread() is ~35× faster than read.csv.That is a massive performance gain, especially useful when repeatedly running EDA or model training. Memory usage was also significantly lower (176 MB vs. 578 MB), and fread() incurred no garbage collection events, whereas read.csv() triggered multiple memory reallocations.These results indicate that fread() is markedly faster and more memory-efficient for large datasets, supporting its use in our big-data workflow.
 
 ```{r}
@@ -103,6 +79,8 @@ bench_tbl %>%
 
 
 ```
+Benchmarking showed Arrow/Parquet reduced runtime from 2.86s to 0.15s (~95% improvement), decreased memory usage by ~72%, and reduced garbage collection events by ~83% compared to base R.
+
 
 ```{r}
 ## Reading the data
