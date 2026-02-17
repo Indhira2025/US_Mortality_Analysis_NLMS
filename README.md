@@ -1,9 +1,64 @@
-Title: Modeling of Smoking-Related Mortality: A Big-Data Analysis of the NLMS (National Longitudinal Mortality Study) Tobacco-Use Cohort in the U.S.
 
-Rationale: Cigarette smoking remains one of the leading preventable causes of death worldwide, driving excess mortality from cardiovascular disease, cancer, and respiratory illnesses. Understanding how smoking duration interacts with demographic, socioeconomic, and lifestyle factors to influence mortality risk is essential for developing targeted public health interventions. Large national cohorts, such as the NLMS PUMS(Public Use Microdata Sample) Tobacco-Use Cohort, provide a unique opportunity to examine these associations using modern analytical tools.
 
-Objectives: The primary goal of this project is to characterize and predict mortality risk among smokers while accounting for demographic and socioeconomic characteristics. Key research questions include:
-1.	How does time since smoking initiation relate to 5-year mortality risk?
-2.	Which demographic or socioeconomic factors (income, education, race, etc.) modify the smoking–mortality association?
-3.	Can we build accurate and interpretable models to predict mortality risk among smokers?
-4.	What are the most influential factors in mortality prediction?
+# Predictive Modeling of Smoking-Related Mortality
+
+## Overview
+This project develops and validates machine learning models to predict 5-year mortality risk associated with cigarette smoking using the US-NLMS dataset (n = 493,282; 43 variables). The framework emphasizes risk stratification performance while maintaining statistical interpretability.
+
+---
+
+## Objectives
+- Build predictive models to estimate mortality risk.
+- Evaluate discrimination performance using cross-validation and ROC/AUC.
+- Identify high-risk individuals through percentile-based risk ranking.
+- Quantify smoking-related mortality effects using interpretable statistical models.
+- Optimize large-scale data processing efficiency.
+
+---
+
+## Dataset
+- Source: US-NLMS
+- Observations: 493,282
+- Variables: 43 demographic and behavioral features
+- Outcome: 5-year all-cause mortality (binary)
+
+---
+
+## Methods
+
+### 1. Data Processing
+- Large-scale data handled using Apache Arrow/Parquet.
+- Achieved ~65% reduction in I/O time.
+- Categorical encoding and missing value handling performed in R.
+
+### 2. Predictive Modeling
+- Logistic regression (classification framework)
+- 5-fold cross-validation
+- Performance metric: ROC/AUC (AUC ≈ 0.85)
+
+### 3. Risk Stratification
+- Probability-based ranking
+- Top 5%, 10%, 20% precision and lift analysis
+
+### 4. Model Interpretation
+- Adjusted odds ratios from logistic regression
+- AIC/BIC for model comparison
+- Smoking status and duration effect quantification
+
+---
+
+## Tech Stack
+- R
+- caret
+- pROC
+- Apache Arrow / Parquet
+
+---
+
+## Results
+- Strong discrimination performance (AUC ≈ 0.85)
+- Effective identification of high-risk individuals
+- Scalable modeling workflow for large datasets
+
+---
+
