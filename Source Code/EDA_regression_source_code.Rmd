@@ -86,7 +86,7 @@ Benchmarking showed Arrow/Parquet reduced runtime from 2.86s to 0.15s (~95% impr
 ## Reading the data
 
 ldata_fread <- fread("tu_new.csv")
-str(ldata_fread)
+#str(ldata_fread)
 
 ###We used Apache Arrow and the Parquet format because the NLMS Tobacco Use dataset is large (~493,000 observations with many variables), and base R data handling becomes inefficient and memory-intensive at this scale.
 
@@ -254,9 +254,11 @@ N_total <- ds_sel %>% summarise(n = n()) %>% collect() %>% pull(n)
 
 N_male <- ds_sel %>% filter(Sex == 1) %>%
   summarise(n = n()) %>% collect() %>% pull(n)
-
+N_male
 N_female <- ds_sel %>% filter(Sex == 2) %>%
   summarise(n = n()) %>% collect() %>% pull(n)
+N_female
+
 cat_summary <- function(varname) {
   ds_sel %>%
     group_by(Sex, !!sym(varname)) %>%
@@ -454,6 +456,7 @@ model_uni1 <- glm(inddea~ factor(smokstat),
 summary(model_uni1)
 exp(coef(model_uni1))       # Odds ratios
 
+
 ## Exposure : Smokestat, Reference = Never smoker
 model_full <- glm(inddea~ factor(smokstat)+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms_recode),
                   family = binomial,
@@ -535,7 +538,7 @@ results_all %>%
 library(tibble)
 
 model_fit <- tibble(
-  Model = c("Univariate", "Multivariable", "Smoking Duration"),
+  Model = c("Univariate Model", "Smoking Status Model", "Smoking Status + Smoking Duration Model"),
   AIC = c(AIC(model_uni1), AIC(model_full), AIC(model7)),
   BIC = c(BIC(model_uni1), BIC(model_full), BIC(model7))
 )
@@ -697,25 +700,8 @@ two_tables %>%
 ```
 
 
-```{r}
-time_model_base <- system.time({
-  model_base <- glm(inddea~ factor(smokstat)+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms),
-                  family = binomial,
-                  data = ds_base)
-})
-
-time_model_arrow <- system.time({
-  model_full <- glm(inddea~ factor(smokstat)+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms_recode),
-                  family = binomial,
-                  data = ds_mod)
-})
 
 
-time_model_base
-time_model_arrow 
-
-
-```
 
 
 

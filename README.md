@@ -30,14 +30,13 @@ This project develops and validates machine learning models to predict 5-year mo
 ### 1. Data Processing
 
 -   Large-scale data handled using Apache Arrow/Parquet.
--   Apache Arrow/Parquet reduced memory allocation by \~72% and garbage collection events by \~83%, while decreasing runtime from 2.86s to 0.15s.
 -   Categorical encoding and missing value handling performed in R.
 
 ### 2. Predictive Modeling
 
 -   Logistic regression (classification framework)
 -   5-fold cross-validation
--   Performance metric: ROC/AUC (AUC ≈ 0.85)
+-   Performance metric: ROC/AUC
 
 ### 3. Risk Stratification
 
@@ -55,16 +54,23 @@ This project develops and validates machine learning models to predict 5-year mo
 ## Tech Stack
 
 -   R
--   caret
 -   pROC
 -   Apache Arrow / Parquet
 
 ------------------------------------------------------------------------
 
-## Results
+## Results 
 
--   Strong discrimination performance (AUC ≈ 0.85)
--   Effective identification of high-risk individuals
--   Scalable modeling workflow for large datasets
+#### (Please refer Report.pdf)
+
+Summary (Refer the complete summary report - Report.pdf)
+
+-   Scalable modeling workflow for large datasets : Apache Arrow/Parquet reduced memory allocation by \~72% and garbage collection events by \~83%, while decreasing runtime from 2.86s to 0.15s.
+
+-   ML Predictive risk model Effective identification of high-risk individuals (codefile: Sourcecode/ML_pred_mortality.Rmd)
+
+    The AUCs of SmokingStatus model`rocCV1` (0.852) and SmokingStatus + SmokingDuration model `rocCV2` (0.853) are very similar, and the small but statistically significant difference (p ≈ 3.44e-5) indicates `rocCV2` has a slightly higher discriminatory performance.
+
+-   Logistic Regression Model for Interpretation (codefile: Sourcecode/EDA_regression_source_code.Rmd)
 
 ------------------------------------------------------------------------

@@ -20,11 +20,9 @@ library(arrow)
 library(tidyr)
 ```
 
-
-
 ```{r}
 ldata_fread <- fread("tu_new.csv")
-str(ldata_fread)
+#str(ldata_fread)
 
 ###We used Apache Arrow and the Parquet format because the NLMS Tobacco Use dataset is large (~493,000 observations with many variables), and base R data handling becomes inefficient and memory-intensive at this scale.
 
@@ -66,61 +64,60 @@ ds_mod <- df %>%
 
 ```
 
-
 ```{r}
 set.seed(123)
-
+### Fitting the ML prediction model
 n <- nrow(ds_mod)
 n
 train_index <- sample(1:n, size = 0.7 * n)
 
 train_data <- ds_mod[train_index, ]
 nrow(train_data)
-head(train_data)
+#head(train_data)
 test_data  <- ds_mod[-train_index, ]
 nrow(test_data)
 #View(test_data)
 
-class(train_data$smokstat)
-unique(train_data$smokstat)
-unique(test_data$smokstat)
+#class(train_data$smokstat)
+#unique(train_data$smokstat)
+#unique(test_data$smokstat)
 
 train_data$smokstat <- factor(train_data$smokstat)
-train_data$smokstat
+#train_data$smokstat
 test_data$smokstat <- factor(test_data$smokstat)
-test_data$smokstat
-sum(complete.cases(train_data))
-sum(complete.cases(test_data))
+#test_data$smokstat
+#sum(complete.cases(train_data))
+#sum(complete.cases(test_data))
 
+### Model1=============================
 
-
+### training
 ## Exposure : Smokestat, Reference = Never smoker
 model_smoking <- glm(inddea~ smokstat + age + factor(race) +sex+ factor(histatus) +adjinc + factor(ms_recode),
                   family = binomial,
                   data = train_data)
-summary(model_smoking)
-exp(coef(model_smoking)) # Odds ratios
 
+## Testing
 test_data <- na.omit(test_data)
+
 # Now predict
 pred_prob_m1 <- predict(model_smoking, newdata = test_data, type = "response")
-
-pred_prob_m1 
+#pred_prob_m1 
 
 library(pROC)
 roc(test_data$inddea, pred_prob_m1)
 plot(roc(test_data$inddea, pred_prob_m1), col="blue", main="ROC Curve Model 1")
 
+
+## Model 2 ==================================================================
 ### Exposure : Duration (Smokestat + agesmk, Reference = everyday smoker)
 
 model_smoking_duration <- glm(inddea ~ smokstat+ agesmk+ age + factor(race)+factor(sex)+factor(histatus)+adjinc+factor(ms_recode),
                   family = binomial,
                   data = train_data)
-summary(model_smoking_duration)
-exp(coef(model_smoking_duration)) # Odds ratios
 
 pred_prob_m2 <- predict(model_smoking_duration, newdata = test_data, type = "response")
-pred_prob_m2
+#pred_prob_m2
 
 
 
@@ -129,8 +126,7 @@ roc2 <- roc(test_data$inddea, pred_prob_m2)
 roc.test(roc1, roc2)  # test if the difference in AUC is significant
 
 
-AIC(model_smoking, model_smoking_duration)
-BIC(model_smoking, model_smoking_duration)
+
 ```
 
 ```{r}
@@ -139,23 +135,23 @@ BIC(model_smoking, model_smoking_duration)
 library(caret)
 set.seed(123)
 
+## Cross Validation
 
-# Convert outcome to factor for classification
 ds_mod$inddea <- factor(ds_mod$inddea, levels = c(0,1))
 n <- nrow(ds_mod)
 n
 train_index <- sample(1:n, size = 0.7 * n)
 
 train_data <- ds_mod[train_index, ]
-nrow(train_data)
-head(train_data)
+#nrow(train_data)
+#head(train_data)
 test_data  <- ds_mod[-train_index, ]
-nrow(test_data)
+#nrow(test_data)
 
 train_data$smokstat <- factor(train_data$smokstat)
-train_data$smokstat
+#train_data$smokstat
 test_data$smokstat <- factor(test_data$smokstat)
-test_data$smokstat
+#test_data$smokstat
 
 # Define 5-fold CV
 train_control <- trainControl(
@@ -198,6 +194,26 @@ cv_model2 <- train(
 # View CV results
 cv_model2
 
+
+
+
+
+```
+
+| Model     | ROC        | Sensitivity | Specificity |
+|-----------|------------|-------------|-------------|
+| cv_model1 | 0.8461     | 0.9986      | 0.0307      |
+| cv_model2 | **0.8465** | 0.9985      | **0.0345**  |
+
+-   **ROC (AUC)** =\~ 0.85 → The models have **excellent discrimination**, meaning it can rank individuals from low to high mortality risk quite well.
+
+-   **Sensitivity** \~ 0.999 → The models are **almost perfect at identifying deaths** (True Positive Rate)
+
+-   **Specificity** = 0.03 → Very low, meaning it **misclassifies many survivors as deaths** (False Positive Rate is high).
+
+    **Note:** This is expected if your dataset is **highly imbalanced**, e.g., deaths are a small fraction of total samples. Logistic regression tends to predict the **majority class poorly for specificity** unless you handle class imbalance.
+
+```{r}
 ## predicting the probabilities
 pred_probs1 <- predict(cv_model1, newdata = test_data, type = "prob")$Yes
 pred_probs2 <- predict(cv_model2, newdata = test_data, type = "prob")$Yes
@@ -212,104 +228,113 @@ plot(rocCV1, col = "blue", main = "ROC Curve: Model Comparison")
 lines(rocCV2, col = "red")
 legend("bottomright", legend = c("Model 1: smokstat", "Model 2: smokstat+agesmk"),
        col = c("blue", "red"), lwd = 2)
-
 ```
 
+The AUCs of SmokingStatus model`rocCV1` (0.852) and SmokingStatus + SmokingDuration model `rocCV2` (0.853) are very similar, and the small but statistically significant difference (p ≈ 3.44e-5) indicates `rocCV2` has a slightly higher discriminatory performance.
 
-
+The models have **excellent discrimination**, meaning it can rank individuals from low to high mortality risk quite well
 
 ```{r}
 
-# Smoking model
-cutoff_10_1 <- quantile(pred_prob_m1, 0.90)
-pred_class_top10 <- ifelse(pred_prob_m1 >= cutoff_10_1, 1, 0)
-cm_top10 <- table(
-  Predicted = pred_class_top10,
-  Actual = test_data$inddea
+## Model1 Calibration 
+
+cal_data1 <- data.frame(
+  obs = test_data$inddea,
+  pred = pred_probs1
 )
-cm_top10
-TP <- cm_top10["1","1"]
-FP <- cm_top10["1","0"]
 
-precision_top10 <- TP / (TP + FP)
-precision_top10
-
-# smoking + duration model
-cutoff_10_2 <- quantile(pred_prob_m2, 0.90)
-pred_class_top10_2 <- ifelse(pred_prob_m2 >= cutoff_10_2, 1, 0)
-cm_top10_2 <- table(
-  Predicted = pred_class_top10_2,
-  Actual = test_data$inddea
+cal_data2 <- data.frame(
+  obs = test_data$inddea,
+  pred = pred_probs2
 )
-cm_top10_2
-TP <- cm_top10_2["1","1"]
-FP <- cm_top10_2["1","0"]
 
-precision_top10_2 <- TP / (TP + FP)
-precision_top10_2
+## Method 1 : Manual Binning
 
-```
+cal_plot <- cal_data1 %>%
+  mutate(bin = ntile(pred, 20)) %>%
+  group_by(bin) %>%
+  summarise(
+    mean_pred = mean(pred),
+    obs_rate = mean(as.numeric(obs) - 1),
+    n = n()
+  )
+
+ggplot(cal_plot, aes(x = mean_pred, y = obs_rate)) +
+  geom_point(size = 2) +
+  geom_line() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  labs(x = "Mean Predicted Probability",
+       y = "Observed Mortality Rate") +
+  ggtitle("Smoking Status Model") +
+  theme_minimal() +  # optional: cleaner look
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )
+       
 
 
-```{r}
-precision_at_k <- function(pred_prob, outcome, k) {
-  cutoff <- quantile(pred_prob, 1 - k)
-  pred_class <- ifelse(pred_prob >= cutoff, 1, 0)
-  
-  cm <- table(Predicted = pred_class, Actual = outcome)
-  
-  TP <- cm["1", "1"]
-  FP <- cm["1", "0"]
-  
-  precision <- TP / (TP + FP)
-  return(precision)
-}
-ks <- c(0.05, 0.10, 0.20)
-
-precision_m1 <- sapply(ks, precision_at_k,
-                        pred_prob = pred_prob_m1,
-                        outcome = test_data$inddea)
-
-precision_m2 <- sapply(ks, precision_at_k,
-                        pred_prob = pred_prob_m2,
-                        outcome = test_data$inddea)
-
-data.frame(
-  Risk_Percentile = c("Top 5%", "Top 10%", "Top 20%"),
-  Smoking_Only = precision_m1,
-  Smoking_Duration = precision_m2
-)
-plot_df <- data.frame(
-  Percentile = rep(c(5, 10, 20), 2),
-  Precision = c(precision_m1, precision_m2),
-  Model = rep(c("Smoking only", "Smoking + duration"), each = 3)
-)
+## methood 2: Loess
 library(ggplot2)
 
-ggplot(plot_df, aes(x = Percentile, y = Precision, color = Model)) +
-  geom_line(size = 1.2) +
-  geom_point(size = 3) +
-  scale_x_continuous(breaks = c(5, 10, 20)) +
-  labs(
-    x = "High-risk group (Top % of predicted risk)",
-    y = "Precision (PPV)",
-    title = "Precision across high-risk percentiles"
-  ) +
-  theme_minimal()
+ggplot(cal_data1, aes(x = pred, y = as.numeric(obs) - 1)) +
+  geom_smooth(method = "loess", se = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  labs(x = "Predicted Probability", y = "Observed Mortality")
 
 ```
 
 ```{r}
-baseline_rate <- mean(test_data$inddea, na.rm = TRUE)
-baseline_rate
-lift_m1 <- precision_m1 / baseline_rate
-lift_m2 <- precision_m2 / baseline_rate
+## Model2 Calibration 
 
-data.frame(
-  Risk_Percentile = c("Top 5%", "Top 10%", "Top 20%"),
-  Lift_Smoking_Only = lift_m1,
-  Lift_Smoking_Duration = lift_m2
+
+
+cal_data2 <- data.frame(
+  obs = test_data$inddea,
+  pred = pred_probs2
 )
+
+## Method 1 : Manual Binning
+
+cal_plot2 <- cal_data2 %>%
+  mutate(bin = ntile(pred, 20)) %>%
+  group_by(bin) %>%
+  summarise(
+    mean_pred = mean(pred),
+    obs_rate = mean(as.numeric(obs) - 1),
+    n = n()
+  )
+
+ggplot(cal_plot2, aes(x = mean_pred, y = obs_rate)) +
+  geom_point(size = 2) +
+  geom_line() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  labs(x = "Mean Predicted Probability",
+       y = "Observed Mortality Rate")+
+  ggtitle("Smoking Status + Smoking Duration Model") +
+  theme_minimal() +  # optional: cleaner look
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )
+
+## methood 2: Loess
+library(ggplot2)
+
+ggplot(cal_data2, aes(x = pred, y = as.numeric(obs) - 1)) +
+  geom_smooth(method = "loess", se = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  labs(x = "Predicted Probability", y = "Observed Mortality")
+```
+
+```{r}
+# Convert Yes/No to numeric
+obs_numeric <- ifelse(test_data$inddea == "Yes", 1, 0)
+
+brier1 <- mean((pred_probs1 - obs_numeric)^2)
+brier2 <- mean((pred_probs2 - obs_numeric)^2)
+
+brier1
+brier2
 
 ```
 
+Model calibration was evaluated using grouped (decile-based) calibration analysis. Predicted probabilities were divided into equal-frequency bins, and observed event rates were calculated within each bin. Manual binning was chosen due to the large sample size and imbalanced outcome distribution, which can lead to instability in nonparametric smoothing approaches (e.g., LOESS), particularly in extreme probability ranges. Grouped calibration provides stable estimation of observed risk, improves interpretability, and aligns with recommended practices for reporting clinical prediction models. Both models demonstrated good overall calibration, with low Brier scores (Model 1: 0.0447; Model 2: 0.0446), indicating accurate probability estimation. The inclusion of smoking duration yielded only marginal improvement in overall prediction error.
