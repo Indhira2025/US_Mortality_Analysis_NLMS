@@ -8,7 +8,6 @@ date: "2025-12-05"
 
 ## Methods
 
-
 ```{r}
 ## Loading the libraries
 library(kableExtra)
@@ -24,9 +23,11 @@ library(tidyr)
 
 ### Data Importing
 
-To efficiently load and preprocess the NLMS Tobacco-Use dataset (~493,000 observations and 43 variables), we compared the performance of base R’s read.csv() with the optimized fread() from the data.table package and Arrow/Parquet function.
+To efficiently load and preprocess the NLMS Tobacco-Use dataset (\~493,000 observations and 43 variables), we compared the performance of base R’s read.csv() with the optimized fread() from the data.table package and Arrow/Parquet function.
 
-Benchmarking demonstrated that fread() provided substantial gains in computational efficiency, completing the data import in 80 milliseconds compared with 3.08 seconds using read.csv(), indicating fread() is ~35× faster than read.csv.That is a massive performance gain, especially useful when repeatedly running EDA or model training. Memory usage was also significantly lower (176 MB vs. 578 MB), and fread() incurred no garbage collection events, whereas read.csv() triggered multiple memory reallocations.These results indicate that fread() is markedly faster and more memory-efficient for large datasets, supporting its use in our big-data workflow.
+Benchmarking demonstrated that fread() provided substantial gains in computational efficiency, completing the data import in 80 milliseconds compared with 3.08 seconds using read.csv(), indicating fread() is \~35× faster than read.csv.That is a massive performance gain, especially useful when repeatedly running EDA or model training. Memory usage was also significantly lower (176 MB vs. 578 MB), and fread() incurred no garbage collection events, whereas read.csv() triggered multiple memory reallocations.These results indicate that fread() is markedly faster and more memory-efficient for large datasets, supporting its use in our big-data workflow.
+
+Benchmarking results demonstrated substantial performance differences across data ingestion methods.
 
 ```{r}
 
@@ -78,9 +79,21 @@ bench_tbl %>%
   column_spec(1, bold = TRUE)
 
 
-```
-Benchmarking showed Arrow/Parquet reduced runtime from 2.86s to 0.15s (~95% improvement), decreased memory usage by ~72%, and reduced garbage collection events by ~83% compared to base R.
+saveRDS(bench_results, "benchmark.rds")
 
+```
+
+Compared to base R (read.csv):
+
+-   fread achieved approximately 97% reduction in runtime and \~70% reduction in memory allocation.
+
+-   Arrow/Parquet achieved approximately 95% reduction in runtime and \~72% reduction in memory allocation.
+
+-   Arrow also required the fewest garbage collection cycles, indicating improved memory efficiency.
+
+These findings demonstrate that modern data-processing frameworks substantially improve computational efficiency for large healthcare datasets. While fread exhibited the fastest runtime, Arrow/Parquet provided superior memory efficiency and scalable infrastructure benefits, making it well suited for high-volume predictive modeling workflows.
+
+Benchmarking showed Arrow/Parquet reduced runtime from 2.86s to 0.15s (\~95% improvement), decreased memory usage by \~72%, and reduced garbage collection events by \~83% compared to base R.
 
 ```{r}
 ## Reading the data
@@ -111,7 +124,6 @@ ds_gender <- ds %>%
 
 #schema(ds)
 ```
-
 
 ```{r}
 ### Descriptive Analysis
@@ -314,8 +326,6 @@ final_table_wide <- final_table_wide %>%
 
 ```
 
-
-
 ```{r}
 
 ### making an elegant table
@@ -366,8 +376,6 @@ saveRDS(final_table_indent, "final_table_indent.rds")
 
 ```
 
-
-
 # Logistic Regression Analysis
 
 ```{r}
@@ -382,7 +390,6 @@ summary(model_uni1)
 exp(coef(model_uni1))       # Odds ratios
 
 ```
-
 
 ```{r}
 # full model
@@ -554,14 +561,9 @@ saveRDS(results_all, "Regression_Results.rds")
 
 ```
 
-
-
-
-
-
 ```{r}
 ### Interpretation Tables
-
+## Smoking Status Model
 
 library(kableExtra)
 
@@ -593,6 +595,20 @@ table_interpretation <- data.frame(
     "17% higher mortality (OR=1.17)",
     "5% lower mortality per income level (OR=0.95)",
     "27% lower mortality (OR=0.73)"
+  ),
+  p_vlaue =c(
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "0.449",
+    "0.0331",
+    "<0.001",
+    "<0.001",
+    "<0.001"
   )
 )
 
@@ -600,7 +616,7 @@ table_interpretation %>%
   kable(
     format = "html",
     caption = "Interpretation of Adjusted Odds Ratios for Mortality:Smoking Status",
-   col.names = c("Predictor", "Interpretation"),
+   col.names = c("Predictor", "Interpretation", "p-value"),
    escape = FALSE
   ) %>%
   kable_styling(
@@ -612,6 +628,9 @@ table_interpretation %>%
 ```
 
 ```{r}
+
+# Smoking Status + Smoking Duration Model
+
 library(kableExtra)
 
 table_model7 <- data.frame(
@@ -642,6 +661,21 @@ table_model7 <- data.frame(
     "19.4% higher mortality (OR = 1.19)",
     "5.9% lower mortality per income level (OR = 0.94)",
     "22.4% lower mortality for married individuals (OR = 0.78)"
+  ),
+  
+  p_vlaue =c(
+    "0.00949",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "0.00234",
+    "0.0331",
+    "0.00212",
+    "0.883",
+    "<0.001",
+    "0.00131",
+    "<0.001",
+    "<0.001"
   )
 )
 
@@ -649,8 +683,8 @@ table_model7 %>%
   kable(
     format = "html",
     caption = "Interpretation of Adjusted Odds Ratios: Smoking Status + Duration Model",
-    col.names = c("Predictor", "Interpretation"),
-    escape = FALSE
+    col.names = c("Predictor", "Interpretation","p-value"),
+    escape = FALSE,
   ) %>%
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed"),
@@ -661,6 +695,7 @@ table_model7 %>%
 
 
 ```
+
 ```{r}
 library(kableExtra)
 
@@ -699,10 +734,6 @@ two_tables %>%
 
 ```
 
+```{r}
 
-
-
-
-
-
-
+```

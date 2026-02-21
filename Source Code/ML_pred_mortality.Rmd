@@ -235,6 +235,97 @@ The AUCs of SmokingStatus model`rocCV1` (0.852) and SmokingStatus + SmokingDurat
 The models have **excellent discrimination**, meaning it can rank individuals from low to high mortality risk quite well
 
 ```{r}
+# Convert outcome to numeric
+obs_numeric <- ifelse(test_data$inddea == "Yes", 1, 0)
+
+
+# 90th percentile cutoff (Top 10%)
+cutoff_10_1 <- quantile(pred_probs1, 0.90)
+cutoff_10_2 <- quantile(pred_probs2, 0.90)
+
+top10_1 <- ifelse(pred_probs1 >= cutoff_10_1, 1, 0)
+top10_2 <- ifelse(pred_probs2 >= cutoff_10_2, 1, 0)
+
+# Baseline mortality rate
+baseline_rate <- mean(obs_numeric)
+baseline_rate 
+
+# Event rate in top 10%
+top10_rate_1 <- mean(obs_numeric[top10_1 == 1])
+top10_rate_2 <- mean(obs_numeric[top10_2 == 1])
+top10_rate_1
+top10_rate_2 
+
+lift_10_1 <- top10_rate_1 / baseline_rate
+lift_10_2 <- top10_rate_2 / baseline_rate
+
+lift_10_1
+lift_10_2
+```
+
+```{r}
+## Compare Top 5%, 10%, 20% Together
+
+compute_lift <- function(pred, obs, percentile) {
+  
+  cutoff <- quantile(pred, 1 - percentile)
+  top_group <- pred >= cutoff
+  
+  baseline <- mean(obs)
+  top_rate <- mean(obs[top_group])
+  
+  lift <- top_rate / baseline
+  
+  return(c(
+    percentile = percentile * 100,
+    baseline_rate = baseline,
+    top_rate = top_rate,
+    lift = lift
+  ))
+}
+
+lift5_1  <- compute_lift(pred_probs1, obs_numeric, 0.05)
+lift10_1 <- compute_lift(pred_probs1, obs_numeric, 0.10)
+lift20_1 <- compute_lift(pred_probs1, obs_numeric, 0.20)
+
+
+lift5_2  <- compute_lift(pred_probs2, obs_numeric, 0.05)
+lift10_2 <- compute_lift(pred_probs2, obs_numeric, 0.10)
+lift20_2 <- compute_lift(pred_probs2, obs_numeric, 0.20)
+
+rbind(lift5_1, lift10_1, lift20_1)
+rbind(lift5_2, lift10_2, lift20_2)
+
+percentiles1 <- seq(0.01, 0.5, by = 0.01)
+
+lift_values <- sapply(percentiles1, function(p) {
+  compute_lift(pred_probs1, obs_numeric, p)["lift"]
+})
+
+par(mfrow = c(1, 2))
+
+p1 <- plot(percentiles1 * 100, lift_values, type = "l",
+     xlab = "Top Risk Percentile (%)",
+     ylab = "Lift",
+     main = " SmokingStatus Model")
+
+percentiles2 <- seq(0.01, 0.5, by = 0.01)
+
+lift_values <- sapply(percentiles2, function(p) {
+  compute_lift(pred_probs2, obs_numeric, p)["lift"]
+})
+
+p2 <- plot(percentiles2 * 100, lift_values, type = "l",
+     xlab = "Top Risk Percentile (%)",
+     ylab = "Lift",
+     main = " SmokingStatus + Duration Model ")
+
+par(mfrow = c(1, 1))
+```
+
+> Lift analysis demonstrated strong risk stratification performance. The top 10% highest predicted risk individuals exhibited approximately five-fold higher mortality compared to the overall population, with even greater concentration observed in the top 5% risk group.
+
+```{r}
 
 ## Model1 Calibration 
 

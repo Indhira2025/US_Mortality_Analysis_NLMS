@@ -1,5 +1,5 @@
 ---
-title: "Prediction_Stat"
+title: "US-NLMS Mortality Risk Analysis"
 output:
   html_document: default
   pdf_document: default
@@ -20,21 +20,20 @@ knitr::opts_chunk$set(
 
 # Predicting Mortality Risk from Cigarette Smoking Using Machine Learning and Interpretable Statistical Models
 
-## Abstract
 
-### Background
+## Background
 
 Cigarette smoking is a major contributor to preventable mortality worldwide, yet substantial heterogeneity exists in smoking behaviors and associated health risks. Accurately predicting mortality risk across diverse smoking profiles is critical for effective risk stratification and targeted intervention. While traditional statistical models offer interpretability, they are often not optimized for predictive performance, whereas machine learning approaches emphasize risk prediction but may lack transparency
 
-### Objective
+## Objective
 
 The goal of this study is to develop and evaluate predictive models for mortality risk associated with cigarette smoking, prioritizing accurate risk stratification and subsequently using statistical models to provide interpretable insights into key risk factors.
 
-# Dataset
+## Dataset
 
 Data Acquisition and Description The National Longitudinal Mortality Study (NLMS) Public Use Microdata Sample (PUMS) Tobacco Use Cohort (dataset filename : tu) contains 493,282 participants who were tracked over a five year period. Forty-three different variables including demographic information, socioeconomic factors, and smoking behaviors were collected for each individual. Importantly, the death indicator column (`inddea` = 1 if deceased, 0 otherwise)) reported whether an individual was alive or deceased at the end of the follow up period. Data was acquired from the NIH-Biologic Specimen and Data Repository Information Coordinating Center under request number 17175 and used for this analysis.
 
-# Exposures and Covariates
+## Exposures and Covariates
 
 The main exposures of interest were:\
 1. Smoking status (smokstat), categorized as never, everyday, some-days, or former smokers.\
@@ -42,11 +41,56 @@ The main exposures of interest were:\
 
 Additional covariates included age, sex, race/ethnicity (race), marital status (ms_recode), health insurance status (histatus), and adjusted income (adjinc). Categorical covariates were encoded as factors for model inclusion.
 
-# Predictive Modeling Approach:
+## Data Processing Efficiency Evaluation
 
-## Methods
+### Methods
 
-Data Splitting: The cohort was divided into training (≈70%) and test (≈30%) subsets. Observations with missing predictor values were removed prior to model fitting to ensure valid probability estimation. Model Specification: Two logistic regression–based predictive models were developed:
+To assess computational efficiency for large-scale modeling, we benchmarked three data ingestion methods in R: base R (read.csv), data.table::fread, and Apache Arrow with Parquet format. Using the NLMS Tobacco Use dataset (~493,000 observations; 43 variables), we compared runtime, memory allocation, and garbage collection frequency using the bench package. Each method was evaluated across three iterations to ensure stable performance estimates. For the Arrow-based approach, the dataset was read via open_dataset() and materialized in memory using collect(), with outputs standardized as data frames for comparability.
+
+### Results
+
+```{r}
+
+library(knitr)
+library(kableExtra)
+
+benchmark_table <- data.frame(
+  Method = c("read_csv", "fread", "arrow_parquet"),
+  Runtime = c("2.86 s", "73.86 ms", "147.14 ms"),
+  Memory = c("578 MB", "176 MB", "164 MB"),
+  GC = c(6, 2, 1)
+)
+
+kable(benchmark_table,
+      caption = "Benchmark Comparison of Data Loading Methods",
+      align = "c") %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
+  )
+
+```
+
+
+Compared to base R (read.csv):
+
+- fread achieved approximately 97% reduction in runtime and ~70% reduction in memory allocation.
+
+- Arrow/Parquet achieved approximately 95% reduction in runtime and ~72% reduction in memory allocation.
+
+- Arrow also required the fewest garbage collection cycles, indicating improved memory efficiency.
+
+These findings demonstrate that modern data-processing frameworks substantially improve computational efficiency for large healthcare datasets. While fread exhibited the fastest runtime, Arrow/Parquet provided superior memory efficiency and scalable infrastructure benefits, making it well suited for high-volume predictive modeling workflows.
+
+
+
+## Predictive Modeling :
+
+### Methods
+
+Data Splitting: The cohort was divided into training (≈70%) and test (≈30%) subsets. Observations with missing predictor values were removed prior to model fitting to ensure valid probability estimation.  
+
+Model Specification: Two logistic regression–based predictive models were developed:
 
 **MODEL 1:** Smoking Status
 
@@ -74,7 +118,9 @@ $$
 
 Prediction and Risk Stratification: Predicted probabilities were generated for the test dataset using the predict() function with type = "response". Individuals were ranked based on predicted mortality risk, and high-risk groups were defined at the top 10% percentiles.
 
-### 5-Fold Cross Validation Results:
+### Results
+
+#### 5-Fold Cross Validation:
 
 | Model                  | ROC        | Sensitivity | Specificity |
 |------------------------|------------|-------------|-------------|
@@ -89,7 +135,7 @@ Prediction and Risk Stratification: Predicted probabilities were generated for t
 
     **Note:** This is expected if your dataset is **highly imbalanced**, e.g., deaths are a small fraction of total samples. Logistic regression tends to predict the **majority class poorly for specificity** unless you handle class imbalance.
 
-### Evaluation Metrics:
+#### Evaluation Metrics:
 
 Discrimination: Area under the receiver operating characteristic curve (AUC) using the pROC package. DeLong’s test was used to compare AUCs between models.
 
@@ -99,7 +145,7 @@ The AUCs of SmokingStatus model`rocCV1` (0.852) and SmokingStatus + SmokingDurat
 
 The models have **excellent discrimination**, it can rank individuals from low to high mortality risk quite well
 
-### Model Calibration
+#### Model Calibration
 
 ![](images/clipboard-4224728340.png)
 
@@ -107,7 +153,9 @@ The models have **excellent discrimination**, it can rank individuals from low t
 
 Model calibration was evaluated using grouped (decile-based) calibration analysis. Predicted probabilities were divided into equal-frequency bins, and observed event rates were calculated within each bin. Manual binning was chosen due to the large sample size and imbalanced outcome distribution, which can lead to instability in nonparametric smoothing approaches (e.g., LOESS), particularly in extreme probability ranges. Grouped calibration provides stable estimation of observed risk, improves interpretability, and aligns with recommended practices for reporting clinical prediction models. Both models demonstrated good overall calibration, with low Brier scores (Model 1: 0.0447; Model 2: 0.0446), indicating accurate probability estimation. The inclusion of smoking duration yielded only marginal improvement in overall prediction error.
 
-# Statistical Modeling for Interpretation
+## Statistical Modeling for Interpretation
+
+### Methods
 
 To complement prediction, logistic regression models were used for effect estimation and interpretability:
 
@@ -168,10 +216,13 @@ final_table_indent2 %>%
   )
 ```
 
+### Results
+
+
 ```{r}
 
 ### Interpretation Tables
-
+## Smoking Status Model
 
 library(kableExtra)
 
@@ -203,6 +254,20 @@ table_interpretation <- data.frame(
     "17% higher mortality (OR=1.17)",
     "5% lower mortality per income level (OR=0.95)",
     "27% lower mortality (OR=0.73)"
+  ),
+  p_vlaue =c(
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "0.449",
+    "0.0331",
+    "<0.001",
+    "<0.001",
+    "<0.001"
   )
 )
 
@@ -210,7 +275,7 @@ table_interpretation %>%
   kable(
     format = "html",
     caption = "Interpretation of Adjusted Odds Ratios for Mortality:Smoking Status",
-   col.names = c("Predictor", "Interpretation"),
+   col.names = c("Predictor", "Interpretation", "p-value"),
    escape = FALSE
   ) %>%
   kable_styling(
@@ -219,9 +284,20 @@ table_interpretation %>%
     position = "center"
   )
 
+
+
+
 ```
 
+
+
+
+
+
+
 ```{r}
+# Smoking Status + Smoking Duration Model
+
 library(kableExtra)
 
 table_model7 <- data.frame(
@@ -252,6 +328,21 @@ table_model7 <- data.frame(
     "19.4% higher mortality (OR = 1.19)",
     "5.9% lower mortality per income level (OR = 0.94)",
     "22.4% lower mortality for married individuals (OR = 0.78)"
+  ),
+  
+  p_vlaue =c(
+    "0.00949",
+    "<0.001",
+    "<0.001",
+    "<0.001",
+    "0.00234",
+    "0.0331",
+    "0.00212",
+    "0.883",
+    "<0.001",
+    "0.00131",
+    "<0.001",
+    "<0.001"
   )
 )
 
@@ -259,8 +350,8 @@ table_model7 %>%
   kable(
     format = "html",
     caption = "Interpretation of Adjusted Odds Ratios: Smoking Status + Duration Model",
-    col.names = c("Predictor", "Interpretation"),
-    escape = FALSE
+    col.names = c("Predictor", "Interpretation","p-value"),
+    escape = FALSE,
   ) %>%
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed"),
@@ -268,8 +359,45 @@ table_model7 %>%
     position = "center"
   )
 
+
 ```
 
-### Comparison of the Models
+
+#### Smoking Status Model
+
+In multivariable logistic regression analysis, smoking status was strongly associated with mortality after adjustment for demographic and socioeconomic covariates. Compared with never smokers, everyday smokers had more than twice the odds of mortality (OR = 2.19, p < 0.001), while some-days smokers (OR = 1.78, p < 0.001) and former smokers (OR = 1.37, p < 0.001) also exhibited significantly elevated risk.
+
+Age was independently associated with mortality, with a 9% increase in odds per additional year of age (OR = 1.09, p < 0.001). Female sex was associated with significantly lower mortality compared to males (OR = 0.57, p = 0.033). Higher income and being married were protective factors, whereas being insured was associated with modestly higher mortality risk. Race-specific associations varied, with some minority groups exhibiting elevated risk relative to White participants.
+
+#### Smoking Status + Smoking Duration Model
+
+When age at smoking initiation was incorporated into the model, significant risk differentiation was observed within smoking categories. Compared with everyday smokers, former smokers had 38.8% lower odds of mortality (OR = 0.61, p < 0.001), and some-days smokers had 13.7% lower odds (OR = 0.86, p = 0.009). Additionally, each additional year delay in smoking initiation was associated with a 2.1% reduction in mortality risk (OR = 0.98, p < 0.001).
+
+Age remained a strong independent predictor (OR ≈ 1.09 per year, p < 0.001). Female sex, higher income, and marriage continued to demonstrate protective associations. Race-related effects remained generally consistent with the primary model.
+
+
+
+
+
+###  Model Fit Comparison
 
 ![](images/clipboard-4005088515.png)
+
+
+
+Model fit improved substantially with the inclusion of smoking duration. The Smoking Status + Smoking Duration model demonstrated markedly lower information criteria values (AIC = 49,666.97; BIC = 49,795.82) compared to the Smoking Status model (AIC = 99,156.09; BIC = 99,297.37) and the univariate model (AIC = 165,691.10; BIC = 165,735.53). These reductions indicate improved explanatory performance and model fit when incorporating smoking initiation age.
+
+
+## Discussion
+
+This study demonstrates the value of integrating machine learning–based prediction with traditional statistical modeling to evaluate mortality risk associated with cigarette smoking. By combining these complementary approaches, we were able to achieve both strong predictive performance and clear epidemiologic interpretability.
+
+From a predictive standpoint, the machine learning framework (cross-validated logistic classification models evaluated using ROC/AUC, calibration, and lift analysis) provided robust discrimination of mortality risk. The models achieved strong performance (AUC ≈ 0.85), indicating effective ranking of individuals according to risk. Risk percentile analysis further demonstrated the ability to identify high-risk subgroups, supporting potential applications in targeted public health intervention, clinical decision support, and population risk stratification. These strengths reflect the primary advantage of machine learning approaches: optimizing predictive accuracy and generalization performance, particularly in large-scale datasets.
+
+However, predictive performance alone does not explain why risk differs across groups. This is where statistical modeling plays a critical role. The multivariable logistic regression models provided interpretable effect estimates (odds ratios) that quantified the independent contribution of smoking status, age at smoking initiation, and other covariates. These results offer actionable insights into the magnitude of smoking-related mortality risk and clarify the protective or adverse effects of demographic and socioeconomic factors. Statistical models thus enhance transparency, interpretability, and scientific understanding — elements that are essential for clinical, regulatory, and public health decision-making.
+
+The integration of smoking duration into the model further illustrates the advantage of combining approaches. While predictive metrics showed modest incremental gains in discrimination, the statistical interpretation revealed meaningful reductions in mortality risk associated with delayed smoking initiation and smoking cessation. Such findings highlight how interpretability complements predictive evaluation by contextualizing model improvements in clinically meaningful terms.
+
+Additionally, the use of scalable data engineering methods (Arrow/Parquet) substantially reduced computational burden, enabling efficient cross-validation and iterative modeling on a large healthcare dataset. This demonstrates that methodological rigor in both modeling and infrastructure is necessary to support reproducible, high-dimensional predictive analysis.
+
+In summary, machine learning and statistical modeling should not be viewed as competing paradigms, but rather as complementary tools. Machine learning optimizes predictive performance and supports risk stratification at scale, while statistical modeling provides interpretability, effect estimation, and inferential clarity. Together, these approaches enable accurate, explainable, and actionable mortality risk assessment in large population datasets.
