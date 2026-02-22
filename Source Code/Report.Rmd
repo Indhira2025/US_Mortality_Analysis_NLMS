@@ -25,9 +25,10 @@ Cigarette smoking is a major contributor to preventable mortality worldwide, yet
 
 The goal of this study is to develop and evaluate predictive models for mortality risk associated with cigarette smoking, prioritizing accurate risk stratification and subsequently using statistical models to provide interpretable insights into key risk factors.
 
-## Dataset
+## Data Acquisition and Description
 
-Data Acquisition and Description The National Longitudinal Mortality Study (NLMS) Public Use Microdata Sample (PUMS) Tobacco Use Cohort (dataset filename : tu) contains 493,282 participants who were tracked over a five year period. Forty-three different variables including demographic information, socioeconomic factors, and smoking behaviors were collected for each individual. Importantly, the death indicator column (`inddea` = 1 if deceased, 0 otherwise)) reported whether an individual was alive or deceased at the end of the follow up period. Data was acquired from the NIH-Biologic Specimen and Data Repository Information Coordinating Center under request number 17175 and used for this analysis.
+ 
+The National Longitudinal Mortality Study (NLMS) Public Use Microdata Sample (PUMS) Tobacco Use Cohort (dataset filename : tu) contains 493,282 participants who were tracked over a five year period. Forty-three different variables including demographic information, socioeconomic factors, and smoking behaviors were collected for each individual. Importantly, the death indicator column (`inddea` = 1 if deceased, 0 otherwise)) reported whether an individual was alive or deceased at the end of the follow up period. Data was acquired from the NIH-Biologic Specimen and Data Repository Information Coordinating Center under request number 17175 and used for this analysis.
 
 ## Exposures and Covariates
 
@@ -77,7 +78,7 @@ Compared to base R (read.csv):
 
 These findings demonstrate that modern data-processing frameworks substantially improve computational efficiency for large healthcare datasets. While fread exhibited the fastest runtime, Arrow/Parquet provided superior memory efficiency and scalable infrastructure benefits, making it well suited for high-volume predictive modeling workflows.
 
-## Predictive Modeling :
+## Predictive Modeling 
 
 ### Methods
 
@@ -113,7 +114,7 @@ Prediction and Risk Stratification: Predicted probabilities were generated for t
 
 ### Results
 
-#### 5-Fold Cross Validation:
+#### 5-Fold Cross Validation
 
 | Model                  | ROC        | Sensitivity | Specificity |
 |------------------------|------------|-------------|-------------|
@@ -126,9 +127,9 @@ Prediction and Risk Stratification: Predicted probabilities were generated for t
 
 -   **Specificity** = 0.03 → Very low, meaning it **misclassifies many survivors as deaths** (False Positive Rate is high).
 
-    **Note:** This is expected if your dataset is **highly imbalanced**, e.g., deaths are a small fraction of total samples. Logistic regression tends to predict the **majority class poorly for specificity** unless you handle class imbalance.
+    **Note:** This is expected if dataset is **highly imbalanced**, e.g., deaths are a small fraction of total samples. Logistic regression tends to predict the **majority class poorly for specificity** unless class imbalance is handled.
 
-#### Evaluation Metrics:
+#### Evaluation Metrics
 
 Discrimination: Area under the receiver operating characteristic curve (AUC) using the pROC package. DeLong’s test was used to compare AUCs between models.
 
@@ -317,7 +318,7 @@ table_interpretation <- data.frame(
 table_interpretation %>%
   kable(
     format = "html",
-    caption = "Interpretation of Adjusted Odds Ratios for Mortality:Smoking Status",
+    caption = "Table 2: Interpretation of Adjusted Odds Ratios for Mortality:Smoking Status",
    col.names = c("Predictor", "Interpretation", "p-value"),
    escape = FALSE
   ) %>%
@@ -386,7 +387,7 @@ table_model7 <- data.frame(
 table_model7 %>%
   kable(
     format = "html",
-    caption = "Interpretation of Adjusted Odds Ratios: Smoking Status + Duration Model",
+    caption = "Table 3: Interpretation of Adjusted Odds Ratios: Smoking Status + Duration Model",
     col.names = c("Predictor", "Interpretation","p-value"),
     escape = FALSE,
   ) %>%
