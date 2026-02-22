@@ -6,7 +6,6 @@ output:
 date: "2026-02-02"
 ---
 
-
 ```{r setup, include=FALSE, message=FALSE, warning=FALSE}
 # Set global chunk options for the document
 knitr::opts_chunk$set(
@@ -16,10 +15,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-
-
 # Predicting Mortality Risk from Cigarette Smoking Using Machine Learning and Interpretable Statistical Models
-
 
 ## Background
 
@@ -45,7 +41,7 @@ Additional covariates included age, sex, race/ethnicity (race), marital status (
 
 ### Methods
 
-To assess computational efficiency for large-scale modeling, we benchmarked three data ingestion methods in R: base R (read.csv), data.table::fread, and Apache Arrow with Parquet format. Using the NLMS Tobacco Use dataset (~493,000 observations; 43 variables), we compared runtime, memory allocation, and garbage collection frequency using the bench package. Each method was evaluated across three iterations to ensure stable performance estimates. For the Arrow-based approach, the dataset was read via open_dataset() and materialized in memory using collect(), with outputs standardized as data frames for comparability.
+To assess computational efficiency for large-scale modeling, we benchmarked three data ingestion methods in R: base R (read.csv), data.table::fread, and Apache Arrow with Parquet format. Using the NLMS Tobacco Use dataset (\~493,000 observations; 43 variables), we compared runtime, memory allocation, and garbage collection frequency using the bench package. Each method was evaluated across three iterations to ensure stable performance estimates. For the Arrow-based approach, the dataset was read via open_dataset() and materialized in memory using collect(), with outputs standardized as data frames for comparability.
 
 ### Results
 
@@ -71,24 +67,21 @@ kable(benchmark_table,
 
 ```
 
-
 Compared to base R (read.csv):
 
-- fread achieved approximately 97% reduction in runtime and ~70% reduction in memory allocation.
+-   fread achieved approximately 97% reduction in runtime and \~70% reduction in memory allocation.
 
-- Arrow/Parquet achieved approximately 95% reduction in runtime and ~72% reduction in memory allocation.
+-   Arrow/Parquet achieved approximately 95% reduction in runtime and \~72% reduction in memory allocation.
 
-- Arrow also required the fewest garbage collection cycles, indicating improved memory efficiency.
+-   Arrow also required the fewest garbage collection cycles, indicating improved memory efficiency.
 
 These findings demonstrate that modern data-processing frameworks substantially improve computational efficiency for large healthcare datasets. While fread exhibited the fastest runtime, Arrow/Parquet provided superior memory efficiency and scalable infrastructure benefits, making it well suited for high-volume predictive modeling workflows.
-
-
 
 ## Predictive Modeling :
 
 ### Methods
 
-Data Splitting: The cohort was divided into training (≈70%) and test (≈30%) subsets. Observations with missing predictor values were removed prior to model fitting to ensure valid probability estimation.  
+Data Splitting: The cohort was divided into training (≈70%) and test (≈30%) subsets. Observations with missing predictor values were removed prior to model fitting to ensure valid probability estimation.
 
 Model Specification: Two logistic regression–based predictive models were developed:
 
@@ -116,7 +109,7 @@ $$
          + \gamma_5\,\text{Sex}_i + \gamma_6\,\text{Insurance}_i + \gamma_7\,\text{Income}_i + \gamma_8\,\text{MaritalStatus}_i
 $$
 
-Prediction and Risk Stratification: Predicted probabilities were generated for the test dataset using the predict() function with type = "response". Individuals were ranked based on predicted mortality risk, and high-risk groups were defined at the top 10% percentiles.
+Prediction and Risk Stratification: Predicted probabilities were generated for the test dataset using the predict() function with type = "response". Individuals were ranked based on predicted mortality risk, and high-risk groups were defined at the top 5%, 10% and 20% percentiles.
 
 ### Results
 
@@ -145,13 +138,64 @@ The AUCs of SmokingStatus model`rocCV1` (0.852) and SmokingStatus + SmokingDurat
 
 The models have **excellent discrimination**, it can rank individuals from low to high mortality risk quite well
 
+### Risk Stratification and Lift Analysis
+
+To evaluate the practical utility of the predictive models for targeted risk identification, lift analysis was conducted on the held-out test dataset. Predicted probabilities were ranked in descending order, and individuals were grouped into percentile-based risk segments (e.g., top 5%, 10%, and 20%).
+
+Lift analysis evaluates how effectively a predictive model concentrates events (e.g., mortality) within the highest predicted risk groups compared to the overall population. Lift was calculated as the ratio of the observed mortality rate within a selected high-risk percentile group to the overall mortality rate in the test population:
+
+$$
+\text{Lift} = \frac{\text{Mortality in Top Group}}{\text{Overall Mortality}}
+$$
+
+This approach quantifies the degree to which the model concentrates mortality risk within the highest predicted probability groups relative to random selection. Lift curves were generated by computing lift values across incremental risk percentiles (1–50%), providing a visual assessment of risk concentration and stratification performance.
+
+```{r}
+library(dplyr)
+library(kableExtra)
+
+lift_table <- data.frame(
+  Model = c(
+    "Smoking Status",
+    "Smoking Status",
+    "Smoking Status",
+    "Smoking + Duration",
+    "Smoking + Duration",
+    "Smoking + Duration"
+  ),
+  Percentile = c("Top 5%", "Top 10%", "Top 20%",
+                 "Top 5%", "Top 10%", "Top 20%"),
+  Baseline_Rate = c("5.50%", "5.50%", "5.50%",
+                    "5.50%", "5.50%", "5.50%"),
+  Event_Rate_Top = c("34.61%", "26.82%", "19.50%",
+                     "34.42%", "27.33%", "19.57%"),
+  Lift = c(6.29, 4.88, 3.54,
+           6.26, 4.97, 3.56)
+)
+
+lift_table %>%
+  kable(
+    caption = "Lift Analysis for Mortality Risk Prediction Models",
+    align = "c",
+    booktabs = TRUE
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  collapse_rows(columns = 1, valign = "middle")
+```
+
+![](images/Screenshot%202026-02-21%20211537.png)
+
+Lift analysis demonstrated strong risk stratification performance. The top 10% highest predicted risk individuals exhibited approximately five-fold higher mortality compared to the overall population, with even greater concentration observed in the top 5% risk group.
+
 #### Model Calibration
 
-![](images/clipboard-4224728340.png)
-
-![](images/clipboard-3382369976.png)
-
 Model calibration was evaluated using grouped (decile-based) calibration analysis. Predicted probabilities were divided into equal-frequency bins, and observed event rates were calculated within each bin. Manual binning was chosen due to the large sample size and imbalanced outcome distribution, which can lead to instability in nonparametric smoothing approaches (e.g., LOESS), particularly in extreme probability ranges. Grouped calibration provides stable estimation of observed risk, improves interpretability, and aligns with recommended practices for reporting clinical prediction models. Both models demonstrated good overall calibration, with low Brier scores (Model 1: 0.0447; Model 2: 0.0446), indicating accurate probability estimation. The inclusion of smoking duration yielded only marginal improvement in overall prediction error.
+
+![](images/Screenshot%202026-02-21%20212245.png)
 
 ## Statistical Modeling for Interpretation
 
@@ -217,7 +261,6 @@ final_table_indent2 %>%
 ```
 
 ### Results
-
 
 ```{r}
 
@@ -289,12 +332,6 @@ table_interpretation %>%
 
 ```
 
-
-
-
-
-
-
 ```{r}
 # Smoking Status + Smoking Duration Model
 
@@ -362,31 +399,23 @@ table_model7 %>%
 
 ```
 
-
 #### Smoking Status Model
 
-In multivariable logistic regression analysis, smoking status was strongly associated with mortality after adjustment for demographic and socioeconomic covariates. Compared with never smokers, everyday smokers had more than twice the odds of mortality (OR = 2.19, p < 0.001), while some-days smokers (OR = 1.78, p < 0.001) and former smokers (OR = 1.37, p < 0.001) also exhibited significantly elevated risk.
+In multivariable logistic regression analysis, smoking status was strongly associated with mortality after adjustment for demographic and socioeconomic covariates. Compared with never smokers, everyday smokers had more than twice the odds of mortality (OR = 2.19, p \< 0.001), while some-days smokers (OR = 1.78, p \< 0.001) and former smokers (OR = 1.37, p \< 0.001) also exhibited significantly elevated risk.
 
-Age was independently associated with mortality, with a 9% increase in odds per additional year of age (OR = 1.09, p < 0.001). Female sex was associated with significantly lower mortality compared to males (OR = 0.57, p = 0.033). Higher income and being married were protective factors, whereas being insured was associated with modestly higher mortality risk. Race-specific associations varied, with some minority groups exhibiting elevated risk relative to White participants.
+Age was independently associated with mortality, with a 9% increase in odds per additional year of age (OR = 1.09, p \< 0.001). Female sex was associated with significantly lower mortality compared to males (OR = 0.57, p = 0.033). Higher income and being married were protective factors, whereas being insured was associated with modestly higher mortality risk. Race-specific associations varied, with some minority groups exhibiting elevated risk relative to White participants.
 
 #### Smoking Status + Smoking Duration Model
 
-When age at smoking initiation was incorporated into the model, significant risk differentiation was observed within smoking categories. Compared with everyday smokers, former smokers had 38.8% lower odds of mortality (OR = 0.61, p < 0.001), and some-days smokers had 13.7% lower odds (OR = 0.86, p = 0.009). Additionally, each additional year delay in smoking initiation was associated with a 2.1% reduction in mortality risk (OR = 0.98, p < 0.001).
+When age at smoking initiation was incorporated into the model, significant risk differentiation was observed within smoking categories. Compared with everyday smokers, former smokers had 38.8% lower odds of mortality (OR = 0.61, p \< 0.001), and some-days smokers had 13.7% lower odds (OR = 0.86, p = 0.009). Additionally, each additional year delay in smoking initiation was associated with a 2.1% reduction in mortality risk (OR = 0.98, p \< 0.001).
 
-Age remained a strong independent predictor (OR ≈ 1.09 per year, p < 0.001). Female sex, higher income, and marriage continued to demonstrate protective associations. Race-related effects remained generally consistent with the primary model.
+Age remained a strong independent predictor (OR ≈ 1.09 per year, p \< 0.001). Female sex, higher income, and marriage continued to demonstrate protective associations. Race-related effects remained generally consistent with the primary model.
 
-
-
-
-
-###  Model Fit Comparison
+### Model Fit Comparison
 
 ![](images/clipboard-4005088515.png)
 
-
-
 Model fit improved substantially with the inclusion of smoking duration. The Smoking Status + Smoking Duration model demonstrated markedly lower information criteria values (AIC = 49,666.97; BIC = 49,795.82) compared to the Smoking Status model (AIC = 99,156.09; BIC = 99,297.37) and the univariate model (AIC = 165,691.10; BIC = 165,735.53). These reductions indicate improved explanatory performance and model fit when incorporating smoking initiation age.
-
 
 ## Discussion
 
