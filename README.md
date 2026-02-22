@@ -5,6 +5,9 @@
 This project develops and validates machine learning models to predict 5-year mortality risk associated with cigarette smoking using the US-NLMS dataset (n = 493,282; 43 variables). The framework emphasizes risk stratification performance while maintaining statistical interpretability.
 
 ------------------------------------------------------------------------
+## Background
+Cigarette smoking remains a leading preventable cause of death worldwide. Yet, risk varies widely across individuals. Accurately identifying high-risk smokers is critical for targeted public health interventions.
+
 
 ## Objectives
 
