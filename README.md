@@ -41,7 +41,7 @@ This project develops and validates machine learning models to predict 5-year mo
 ### 3. Risk Stratification
 
 -   Probability-based ranking
--   Top 10% precision and lift analysis
+-   Top 5%,10%, 20% precision and lift analysis
 
 ### 4. Model Interpretation
 
@@ -61,16 +61,18 @@ This project develops and validates machine learning models to predict 5-year mo
 
 ## Results 
 
-#### (Please refer Report.pdf)
-
-Summary (Refer the complete summary report - Report.pdf)
-
+### Summary (Refer the complete summary report - Report.pdf)
+  ##### Interesting Key insights:
 -   Scalable modeling workflow for large datasets : Apache Arrow/Parquet reduced memory allocation by \~72% and garbage collection events by \~83%, while decreasing runtime from 2.86s to 0.15s.
+##### ML Predictive risk model Effective identification of high-risk individuals (codefile: Sourcecode/ML_pred_mortality.Rmd)
+-   Machine Learning models have **excellent discrimination** and risk ranking. 
+* The AUCs of SmokingStatus model is 0.852 and SmokingStatus + SmokingDuration model is 0.853 are very similar, and the small but statistically significant difference (p ≈ 3.44e-5) indicates SmokingStatus + SmokingDuration model has a slightly higher discriminatory performance.
+* Lift analysis demonstrated strong risk stratification performance. The top 10% highest-risk individuals had ~5× higher mortality than average.
+##### Logistic Regression Model for Interpretation (codefile: Sourcecode/EDA_regression_source_code.Rmd)
+Statistical models provide interpretability, revealing:
+ * Everyday smokers have 119% higher mortality (OR=2.19) vs never smokers and Some-day smokers 78% higher mortality (OR=1.78) vs never smokers.
+ * Each additional year delay in smoking initiation was associated with a 2.1% reduction in mortality risk.
+ * Model fit improved substantially with the inclusion of smoking duration. The Smoking Status + Smoking Duration model demonstrated markedly lower information criteria values (AIC = 49,666.97; BIC = 49,795.82) compared to the Smoking Status only model (AIC = 99,156.09; BIC = 99,297.37).
 
--   ML Predictive risk model Effective identification of high-risk individuals (codefile: Sourcecode/ML_pred_mortality.Rmd)
-
-    The AUCs of SmokingStatus model`rocCV1` (0.852) and SmokingStatus + SmokingDuration model `rocCV2` (0.853) are very similar, and the small but statistically significant difference (p ≈ 3.44e-5) indicates `rocCV2` has a slightly higher discriminatory performance.
-
--   Logistic Regression Model for Interpretation (codefile: Sourcecode/EDA_regression_source_code.Rmd)
-
+##### Takeaway: Machine learning delivers predictive power, while statistical modeling provides actionable insight. Together, they enable accurate, interpretable risk assessment.
 ------------------------------------------------------------------------
